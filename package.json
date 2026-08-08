@@ -1,0 +1,51 @@
+{
+  "name": "@sprint-agent/sprint",
+  "version": "0.1.0",
+  "description": "Provider-independent sprint management for Obsidian",
+  "author": "Shijimi",
+  "license": "MIT",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/types/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/types/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "main.js",
+    "manifest.json",
+    "styles.css"
+  ],
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "dev": "node scripts/build.mjs --watch",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "test": "jest --runInBand",
+    "check": "npm run typecheck && npm run lint && npm run test && npm run build"
+  },
+  "peerDependencies": {
+    "obsidian": ">=1.10.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/jest": "^30.0.0",
+    "@types/node": "^25.5.2",
+    "@typescript-eslint/eslint-plugin": "^8.58.0",
+    "@typescript-eslint/parser": "^8.58.0",
+    "esbuild": "^0.28.1",
+    "eslint": "^10.2.0",
+    "jest": "^30.3.0",
+    "jest-environment-jsdom": "^30.3.0",
+    "obsidian": "latest",
+    "ts-jest": "^29.4.9",
+    "typescript-eslint": "^8.58.0",
+    "typescript": "^6.0.2"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

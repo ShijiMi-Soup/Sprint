@@ -1,0 +1,7 @@
+node_modules/
+dist/
+main.js
+styles.css
+coverage/
+.DS_Store
+*.log
