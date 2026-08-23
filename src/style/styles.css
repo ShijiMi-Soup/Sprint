@@ -32,13 +32,8 @@
 }
 
 .sprint-bases-project {
-  border-bottom: 1px solid var(--background-modifier-border);
   min-width: 0;
   padding-bottom: var(--size-4-5);
-}
-
-.sprint-bases-project:last-child {
-  border-bottom: 0;
 }
 
 .sprint-bases-project-header {
