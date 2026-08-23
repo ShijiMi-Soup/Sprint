@@ -379,9 +379,19 @@ class SprintBasesView extends BasesView {
   }
 }
 
-interface VelocityPoint {
+export interface VelocityPoint {
   label: string;
   value: number;
+  sprintNumber: number;
+  startDate: string;
+}
+
+export function selectRecentVelocityPoints(points: VelocityPoint[]): VelocityPoint[] {
+  return [...points]
+    .sort((left, right) => (
+      left.startDate.localeCompare(right.startDate) || left.sprintNumber - right.sprintNumber
+    ))
+    .slice(-8);
 }
 
 class SprintVelocityView extends BasesView {
@@ -440,7 +450,9 @@ class SprintVelocityView extends BasesView {
       const barWrap = column.createDiv({ cls: 'sprint-velocity-bar-wrap' });
       barWrap.createDiv({
         cls: 'sprint-velocity-bar',
-        attr: { style: `height: ${Math.max(4, Math.round((point.value / max) * 100))}%` },
+        attr: {
+          style: `height: ${point.value === 0 ? 0 : Math.max(4, Math.round((point.value / max) * 100))}%`,
+        },
       });
       column.createDiv({ cls: 'sprint-velocity-label', text: point.label });
     }
@@ -449,7 +461,7 @@ class SprintVelocityView extends BasesView {
   private getVelocityPoints(rootFolder: string): VelocityPoint[] {
     const root = rootFolder.replace(/^\/+|\/+$/g, '');
     const taskFiles = this.filesIn(`${root}/Tasks`);
-    return this.filesIn(`${root}/Sprints`)
+    return selectRecentVelocityPoints(this.filesIn(`${root}/Sprints`)
       .map((file) => {
         const frontmatter = this.app.metadataCache.getFileCache(file)?.frontmatter;
         const sprintNumber = typeof frontmatter?.['sprint number'] === 'number'
@@ -465,12 +477,7 @@ class SprintVelocityView extends BasesView {
             sum + estimate(this.app.metadataCache.getFileCache(task)?.frontmatter)
           ), 0);
         return { label: file.basename, value, sprintNumber, startDate };
-      })
-      .filter((point) => point.value > 0)
-      .sort((left, right) => (
-        left.startDate.localeCompare(right.startDate) || left.sprintNumber - right.sprintNumber
-      ))
-      .slice(-8);
+      }));
   }
 
   private filesIn(folder: string): TFile[] {

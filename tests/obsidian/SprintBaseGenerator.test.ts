@@ -67,6 +67,8 @@ describe('SprintBaseGenerator', () => {
     expect(written.get('Agile PM/Bases/Sprints.base')).toContain('name: "Velocity"');
     expect(written.get('Agile PM/Bases/Projects.base')).not.toContain('note.status');
     expect(written.get('Agile PM/Agile PM.md')).toContain('## Velocity');
+    expect(written.get('Agile PM/Agile PM.md')).toContain('---\n\n## Velocity');
+    expect(written.get('Agile PM/Agile PM.md')).toContain('---\n\n## Projects');
     expect(written.get('Agile PM/Agile PM.md')).toContain('![[Agile PM/Bases/Tasks.base#Current sprint]]');
     expect(written.get('Agile PM/Agile PM.md')).toContain('![[Agile PM/Bases/Tasks.base#Next sprint]]');
     expect(written.get('Agile PM/Agile PM.md')).not.toContain('- [ ]');

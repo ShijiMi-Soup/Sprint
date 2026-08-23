@@ -6,6 +6,7 @@ import {
   getEstimateTone,
   getSprintBasesOptions,
   getTaskProjectGroup,
+  selectRecentVelocityPoints,
 } from '@/obsidian/SprintBasesView';
 
 describe('SprintBasesView', () => {
@@ -82,5 +83,17 @@ describe('SprintBasesView', () => {
     [{}, 'No project'],
   ])('resolves task project swimlanes', (frontmatter, expected) => {
     expect(getTaskProjectGroup(frontmatter)).toBe(expected);
+  });
+
+  it('keeps zero-point sprints in the recent Velocity series', () => {
+    const points = selectRecentVelocityPoints([
+      { label: 'Sprint 2', value: 0, sprintNumber: 2, startDate: '2026-08-24' },
+      { label: 'Sprint 1', value: 3, sprintNumber: 1, startDate: '2026-08-17' },
+    ]);
+
+    expect(points).toEqual([
+      expect.objectContaining({ label: 'Sprint 1', value: 3 }),
+      expect.objectContaining({ label: 'Sprint 2', value: 0 }),
+    ]);
   });
 });
