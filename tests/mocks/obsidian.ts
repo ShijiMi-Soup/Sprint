@@ -14,6 +14,17 @@ export class Plugin {}
 export class PluginSettingTab {}
 export class Setting {}
 export class Notice {}
+export class Modal {
+  titleEl = { setText: jest.fn() };
+  contentEl = { createEl: jest.fn(), empty: jest.fn() };
+
+  constructor(readonly app: unknown) {}
+
+  open(): void {}
+  close(): void {}
+  onOpen(): void {}
+  onClose(): void {}
+}
 
 export function normalizePath(path: string): string {
   return path.replace(/\\/g, '/').replace(/\/{2,}/g, '/');

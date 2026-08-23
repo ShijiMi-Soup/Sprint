@@ -11,11 +11,13 @@ export interface ResolvedSprintProfile extends SprintDefaults {
   rootFolder: string;
   tasksBasePath: string;
   sprintsBasePath: string;
+  projectsBasePath: string;
   anchorDate: string;
 }
 
 interface LegacySprintSettings {
   enabled?: boolean;
+  generateVaultRootInstructions?: boolean;
   rootFolder?: string;
   durationWeeks?: number;
   startDay?: number;
@@ -40,9 +42,30 @@ function profileForRoot(rootFolder: string, anchorDate = ''): SprintProfile {
     rootFolder: root,
     tasksBasePath: `${root}/Bases/Tasks.base`,
     sprintsBasePath: `${root}/Bases/Sprints.base`,
+    projectsBasePath: `${root}/Bases/Projects.base`,
     anchorDate,
     overrides: {},
   };
+}
+
+function defaultBasePath(rootFolder: string, filename: string): string {
+  return `${rootFolder}/Bases/${filename}`;
+}
+
+function normalizeBasePath(
+  path: string | undefined,
+  rootFolder: string,
+  filename: string,
+): string {
+  const trimmed = path?.trim() ?? '';
+  if (!trimmed) return defaultBasePath(rootFolder, filename);
+  if (
+    trimmed.endsWith(`/Bases/${filename}`)
+    && !trimmed.startsWith(`${rootFolder}/`)
+  ) {
+    return defaultBasePath(rootFolder, filename);
+  }
+  return trimmed;
 }
 
 export function normalizeSprintSettings(value: unknown): SprintSettings {
@@ -53,6 +76,7 @@ export function normalizeSprintSettings(value: unknown): SprintSettings {
   if (!input.defaults || !Array.isArray(input.profiles)) {
     return {
       enabled: legacy.enabled ?? false,
+      generateVaultRootInstructions: legacy.generateVaultRootInstructions ?? false,
       defaults: {
         durationWeeks: legacy.durationWeeks ?? DEFAULTS.durationWeeks,
         startDay: legacy.startDay ?? DEFAULTS.startDay,
@@ -67,12 +91,21 @@ export function normalizeSprintSettings(value: unknown): SprintSettings {
   const defaults = input.defaults as Partial<SprintDefaults>;
   return {
     enabled: typeof input.enabled === 'boolean' ? input.enabled : false,
+    generateVaultRootInstructions: input.generateVaultRootInstructions === true,
     defaults: { ...DEFAULTS, ...defaults },
-    profiles: (input.profiles as SprintProfile[]).map((profile) => ({
-      ...profileForRoot(profile.rootFolder, profile.anchorDate),
-      ...profile,
-      overrides: profile.overrides ?? {},
-    })),
+    profiles: (input.profiles as SprintProfile[]).map((profile) => {
+      const normalized = {
+        ...profileForRoot(profile.rootFolder, profile.anchorDate),
+        ...profile,
+        overrides: profile.overrides ?? {},
+      };
+      return {
+        ...normalized,
+        tasksBasePath: normalizeBasePath(normalized.tasksBasePath, normalized.rootFolder, 'Tasks.base'),
+        sprintsBasePath: normalizeBasePath(normalized.sprintsBasePath, normalized.rootFolder, 'Sprints.base'),
+        projectsBasePath: normalizeBasePath(normalized.projectsBasePath, normalized.rootFolder, 'Projects.base'),
+      };
+    }),
   };
 }
 
@@ -86,6 +119,7 @@ export function resolveSprintProfile(
     rootFolder: profile.rootFolder,
     tasksBasePath: profile.tasksBasePath,
     sprintsBasePath: profile.sprintsBasePath,
+    projectsBasePath: profile.projectsBasePath,
     anchorDate: profile.anchorDate,
     ...settings.defaults,
     ...profile.overrides,

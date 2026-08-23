@@ -30,6 +30,19 @@ class MemorySprintVault implements SprintVault {
     return { path, basename: path.split('/').at(-1)!.replace(/\.md$/, '') };
   }
 
+  async upsertNote(
+    path: string,
+    frontmatter: Record<string, unknown>,
+    body: string,
+  ): Promise<{ note: SprintVaultNote; created: boolean }> {
+    const created = !this.notes.has(path);
+    this.notes.set(path, { frontmatter: { ...frontmatter }, body });
+    return {
+      note: { path, basename: path.split('/').at(-1)!.replace(/\.md$/, '') },
+      created,
+    };
+  }
+
   async updateFrontmatter(
     note: SprintVaultNote,
     mutation: (frontmatter: Record<string, unknown>) => void,
@@ -42,6 +55,7 @@ class MemorySprintVault implements SprintVault {
 function settings(overrides: Partial<SprintSettings> = {}): SprintSettings {
   return {
     enabled: true,
+    generateVaultRootInstructions: false,
     defaults: {
       durationWeeks: 1,
       startDay: 1,
@@ -62,6 +76,7 @@ function profile(overrides: Partial<SprintProfile> = {}): SprintProfile {
     rootFolder: 'Agile PM',
     tasksBasePath: 'Agile PM/Bases/Tasks.base',
     sprintsBasePath: 'Agile PM/Bases/Sprints.base',
+    projectsBasePath: 'Agile PM/Bases/Projects.base',
     anchorDate: '2026-08-03',
     overrides: {},
     ...overrides,
@@ -76,16 +91,16 @@ describe('SprintManager', () => {
 
     const result = await manager.sync();
 
-    expect(result.created).toBe(2);
-    expect(vault.notes.get('Agile PM/Sprints/Sprint 4.md')?.frontmatter).toMatchObject({
-      'sprint number': 4,
+    expect(result.created).toBe(1);
+    expect(vault.notes.get('Agile PM/Sprints/Sprint 3.md')?.frontmatter).toMatchObject({
+      'sprint number': 3,
       'start date': '2026-08-03',
       'end date': '2026-08-09',
       'sprint status': 'current',
       review: '',
       retrospective: '',
     });
-    expect(vault.notes.get('Agile PM/Sprints/Sprint 5.md')?.frontmatter).toMatchObject({
+    expect(vault.notes.get('Agile PM/Sprints/Sprint 4.md')?.frontmatter).toMatchObject({
       'start date': '2026-08-10',
       'sprint status': 'next',
     });
@@ -100,6 +115,26 @@ describe('SprintManager', () => {
 
     expect(second.created).toBe(0);
     expect(vault.listMarkdownNotes('Agile PM/Sprints')).toHaveLength(2);
+  });
+
+  it('repairs empty existing sprint files instead of failing creation', async () => {
+    const vault = new MemorySprintVault();
+    vault.notes.set('Agile PM/Sprints/Sprint 1.md', { frontmatter: {}, body: '' });
+    const manager = new SprintManager(vault, () => settings(), () => '2026-08-07');
+
+    const result = await manager.sync();
+
+    expect(result.created).toBe(1);
+    expect(vault.notes.get('Agile PM/Sprints/Sprint 1.md')?.frontmatter).toMatchObject({
+      'sprint number': 1,
+      'start date': '2026-08-03',
+      'sprint status': 'current',
+    });
+    expect(vault.notes.get('Agile PM/Sprints/Sprint 2.md')?.frontmatter).toMatchObject({
+      'sprint number': 2,
+      'start date': '2026-08-10',
+      'sprint status': 'next',
+    });
   });
 
   it('catches up missed cycles and moves unfinished tasks into the new current sprint', async () => {

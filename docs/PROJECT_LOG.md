@@ -37,6 +37,8 @@ The following sprint behavior was implemented:
 
 The Tasks and Sprints Bases were deliberately associated with the same sprint profile so they cannot create independent cadences.
 
+Task estimate badges use escalating warning colors by default: 1-2 points green, 3-4 yellow, 5-6 orange, and 7 or more red. A future setting should allow users to configure the thresholds and colors without changing the task estimate data model.
+
 ### Naming and Attribution
 
 The product name selected was **Sprint Agent** with the identifier `sprint-agent`. The author was changed to **Shijimi**.

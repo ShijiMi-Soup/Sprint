@@ -30,6 +30,11 @@ export interface SprintVault {
     frontmatter: Record<string, unknown>,
     body: string,
   ): Promise<SprintVaultNote>;
+  upsertNote(
+    path: string,
+    frontmatter: Record<string, unknown>,
+    body: string,
+  ): Promise<{ note: SprintVaultNote; created: boolean }>;
   updateFrontmatter(
     note: SprintVaultNote,
     mutation: (frontmatter: Record<string, unknown>) => void,
@@ -177,7 +182,12 @@ export class SprintManager {
     if (!existingStarts.has(currentStart)) startsToConsider.push(currentStart);
     if (!existingStarts.has(lastFutureStart)) startsToConsider.push(lastFutureStart);
 
-    let nextNumber = Math.max(0, ...records.map((record) => record.number)) + 1;
+    const positiveUndatedNumbers = records
+      .filter((record) => record.startDate === null && record.number > 0)
+      .map((record) => record.number);
+    let nextNumber = datedRecords.length > 0
+      ? Math.max(0, ...records.map((record) => record.number)) + 1
+      : positiveUndatedNumbers.length > 0 ? Math.min(...positiveUndatedNumbers) : 1;
     let created = 0;
     for (const startDate of Array.from(new Set(startsToConsider)).sort()) {
       if (existingStarts.has(startDate)) continue;
@@ -185,7 +195,7 @@ export class SprintManager {
       if (!sprintName || sprintName.includes('/')) {
         throw new Error(`Invalid sprint naming format: ${settings.namingFormat}`);
       }
-      const note = await this.vault.createNote(
+      const { note, created: didCreate } = await this.vault.upsertNote(
         `${sprintsFolder}/${sprintName}.md`,
         {
           'sprint number': nextNumber,
@@ -205,7 +215,7 @@ export class SprintManager {
       });
       existingStarts.add(startDate);
       nextNumber += 1;
-      created += 1;
+      if (didCreate) created += 1;
     }
 
     const currentRecord = records.find((record) => record.startDate === currentStart);

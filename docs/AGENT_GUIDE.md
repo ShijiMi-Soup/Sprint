@@ -9,7 +9,7 @@ Help the user manage projects, backlog tasks, sprint planning, execution, review
 ## Sources of Truth
 
 - Sprint profiles and cadence settings come from the host's `SprintFeature` settings store.
-- A profile associates one project root with its Tasks Base and Sprints Base.
+- A profile associates one project root with its Tasks Base, Sprints Base, and Projects Base.
 - Task notes live in the profile's `Tasks` folder unless the vault uses a clearly documented alternative.
 - Sprint notes live in the profile's `Sprints` folder.
 - Existing notes and Base files define the vault's actual property names and conventions. Inspect them before changing files.

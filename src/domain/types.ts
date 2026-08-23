@@ -23,12 +23,14 @@ export interface SprintProfile {
   rootFolder: string;
   tasksBasePath: string;
   sprintsBasePath: string;
+  projectsBasePath: string;
   anchorDate: string;
   overrides: SprintProfileOverrides;
 }
 
 export interface SprintSettings {
   enabled: boolean;
+  generateVaultRootInstructions: boolean;
   defaults: SprintDefaults;
   profiles: SprintProfile[];
 }

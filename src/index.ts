@@ -26,9 +26,15 @@ export type {
 } from './domain/types';
 export { SprintFeature, type SprintFeatureApi } from './SprintFeature';
 export {
+  SprintBaseGenerator,
+  type SprintBaseGenerationResult,
+} from './obsidian/SprintBaseGenerator';
+export {
   createSprintBasesViewRegistration,
+  createSprintVelocityViewRegistration,
   getSprintBasesOptions,
   SPRINT_BASES_VIEW_TYPE,
+  SPRINT_VELOCITY_VIEW_TYPE,
 } from './obsidian/SprintBasesView';
 export { ObsidianSprintVault } from './obsidian/ObsidianSprintVault';
 export {

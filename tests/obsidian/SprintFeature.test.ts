@@ -19,7 +19,11 @@ describe('SprintFeature', () => {
       app: {
         fileManager: {},
         metadataCache: {},
-        vault: {},
+        vault: {
+          create: jest.fn(),
+          createFolder: jest.fn(),
+          getAbstractFileByPath: jest.fn(),
+        },
         workspace: { onLayoutReady: jest.fn() },
       },
       manifest: { id: 'host' },
@@ -36,9 +40,38 @@ describe('SprintFeature', () => {
 
     expect((host as unknown as { registerBasesView: jest.Mock }).registerBasesView)
       .toHaveBeenCalledWith('sprint-agent-sprint-board', expect.any(Object));
+    expect((host as unknown as { registerBasesView: jest.Mock }).registerBasesView)
+      .toHaveBeenCalledWith('sprint-agent-velocity-chart', expect.any(Object));
     expect((host as unknown as { addCommand: jest.Mock }).addCommand)
       .toHaveBeenCalledWith(expect.objectContaining({ id: 'sync-sprints' }));
+    expect((host as unknown as { addCommand: jest.Mock }).addCommand)
+      .toHaveBeenCalledWith(expect.objectContaining({ id: 'generate-sprint-bases' }));
+    expect((host as unknown as { addCommand: jest.Mock }).addCommand)
+      .toHaveBeenCalledWith(expect.objectContaining({ id: 'diagnose-sprint-generation' }));
     expect(saved).toHaveBeenCalledWith(expect.objectContaining({ enabled: true }));
     expect(feature.settings.enabled).toBe(true);
+  });
+
+  it('continues core sprint synchronization when support-file generation fails', async () => {
+    const feature = Object.create(SprintFeature.prototype) as SprintFeature;
+    const managerSync = jest.fn().mockResolvedValue({
+      created: 2,
+      movedTasks: 0,
+      updatedSprints: 0,
+      profilesSynced: 1,
+    });
+    const generate = jest.fn().mockRejectedValue(new Error('types.json is not writable'));
+    Object.assign(feature as unknown as Record<string, unknown>, {
+      manager: { sync: managerSync },
+      baseGenerator: { generate },
+      currentSettings: normalizeSprintSettings({ enabled: true }),
+      lastSyncWarnings: [],
+    });
+
+    const result = await feature.sync();
+
+    expect(result.created).toBe(2);
+    expect(managerSync).toHaveBeenCalledTimes(1);
+    expect(generate).toHaveBeenCalledTimes(2);
   });
 });

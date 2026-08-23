@@ -1,0 +1,179 @@
+.sprint-bases-view {
+  min-height: 100%;
+  padding: var(--size-4-3);
+}
+
+.sprint-bases-header {
+  align-items: baseline;
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: var(--size-4-3);
+}
+
+.sprint-bases-header h3,
+.sprint-bases-group h4 {
+  margin: 0;
+}
+
+.sprint-bases-profile {
+  color: var(--text-muted);
+  font-size: var(--font-ui-small);
+}
+
+.sprint-bases-board,
+.sprint-bases-kanban {
+  display: grid;
+  gap: var(--size-4-3);
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.sprint-bases-kanban .sprint-bases-group {
+  background: var(--background-secondary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 8px;
+  padding: var(--size-4-2);
+}
+
+.sprint-bases-group {
+  min-width: 0;
+}
+
+.sprint-bases-entries {
+  display: grid;
+  gap: var(--size-4-2);
+  margin-top: var(--size-4-2);
+}
+
+.sprint-bases-view button.sprint-bases-entry {
+  align-items: start;
+  background: var(--background-primary-alt);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 6px;
+  color: var(--text-normal);
+  display: grid;
+  gap: var(--size-4-2);
+  grid-template-columns: minmax(0, 1fr);
+  grid-auto-rows: max-content;
+  height: auto !important;
+  justify-items: start;
+  max-height: none !important;
+  min-height: 36px;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  padding: var(--size-4-2);
+  text-align: left;
+  width: 100%;
+}
+
+.sprint-bases-view button.sprint-bases-entry:hover {
+  background: var(--background-modifier-hover);
+}
+
+.sprint-bases-empty {
+  color: var(--text-muted);
+  font-size: var(--font-ui-small);
+  padding: var(--size-4-2);
+}
+
+.sprint-bases-view .sprint-bases-entry-title,
+.sprint-bases-view .sprint-bases-entry-meta {
+  display: block;
+}
+
+.sprint-bases-view .sprint-bases-entry-title {
+  width: 100%;
+}
+
+.sprint-bases-view .sprint-bases-entry-meta {
+  align-self: start;
+  display: flex;
+  font-size: var(--font-ui-smaller);
+  gap: var(--size-4-2);
+}
+
+.sprint-bases-view .sprint-bases-entry-points {
+  border: 1px solid transparent;
+  border-radius: 4px;
+  line-height: 1.4;
+  padding: 1px var(--size-4-2);
+}
+
+.sprint-bases-view .sprint-bases-entry-points--low {
+  background: color-mix(in srgb, var(--color-green) 12%, transparent);
+  border-color: color-mix(in srgb, var(--color-green) 28%, transparent);
+  color: color-mix(in srgb, var(--color-green) 72%, var(--text-normal));
+}
+
+.sprint-bases-view .sprint-bases-entry-points--medium {
+  background: color-mix(in srgb, var(--color-yellow) 12%, transparent);
+  border-color: color-mix(in srgb, var(--color-yellow) 28%, transparent);
+  color: color-mix(in srgb, var(--color-yellow) 72%, var(--text-normal));
+}
+
+.sprint-bases-view .sprint-bases-entry-points--high {
+  background: color-mix(in srgb, var(--color-orange) 12%, transparent);
+  border-color: color-mix(in srgb, var(--color-orange) 28%, transparent);
+  color: color-mix(in srgb, var(--color-orange) 72%, var(--text-normal));
+}
+
+.sprint-bases-view .sprint-bases-entry-points--critical {
+  background: color-mix(in srgb, var(--color-red) 12%, transparent);
+  border-color: color-mix(in srgb, var(--color-red) 28%, transparent);
+  color: color-mix(in srgb, var(--color-red) 72%, var(--text-normal));
+}
+
+.sprint-velocity-view {
+  min-height: 100%;
+  padding: var(--size-4-3);
+}
+
+.sprint-velocity-empty {
+  color: var(--text-muted);
+}
+
+.sprint-velocity-chart {
+  align-items: end;
+  display: grid;
+  gap: var(--size-4-3);
+  grid-template-columns: repeat(auto-fit, minmax(64px, 1fr));
+  min-height: 220px;
+}
+
+.sprint-velocity-column {
+  align-items: center;
+  display: grid;
+  gap: var(--size-2-3);
+  grid-template-rows: auto 1fr auto;
+  min-width: 0;
+}
+
+.sprint-velocity-value {
+  color: var(--text-muted);
+  font-size: var(--font-ui-small);
+}
+
+.sprint-velocity-bar-wrap {
+  align-items: end;
+  background: var(--background-secondary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 6px;
+  display: flex;
+  height: 160px;
+  overflow: hidden;
+  width: 100%;
+}
+
+.sprint-velocity-bar {
+  background: var(--interactive-accent);
+  width: 100%;
+}
+
+.sprint-velocity-label {
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+  overflow: hidden;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  width: 100%;
+}
