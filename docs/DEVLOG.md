@@ -12,6 +12,7 @@ Related commits:
 
 - Automatic Agile PM workspace initialization when Automatic sprints is enabled.
 - Generated Tasks, Sprints, and Projects Bases with sample tutorial data and property types.
+- Five Sprint 1 tutorial tasks and two Sprint 2 continuation tasks, with existing sample-task edits preserved during migration.
 - An `Agile PM.md` dashboard showing the current sprint, current tasks, Sprint board, Velocity, and projects.
 - A three-column Sprint board for Not started, In progress, and Done tasks.
 - Drag-and-drop task state changes between all three Sprint board columns.

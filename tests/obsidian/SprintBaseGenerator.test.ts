@@ -72,6 +72,10 @@ describe('SprintBaseGenerator', () => {
     expect(written.get('Agile PM/Agile PM.md')).not.toContain('```mermaid');
     expect(written.get('Agile PM/Agile PM.md')).not.toContain('sprint-managed-start');
     expect(written.get('Agile PM/Tasks/Plan work into the current sprint.md')).toContain('in progress: true');
+    expect(written.get('Agile PM/Tasks/Plan work into the current sprint.md')).toContain('  - "[[Sprint 1]]"');
+    expect(written.get("Agile PM/Tasks/Plan next week's sprint.md")).toContain('  - "[[Sprint 2]]"');
+    expect(written.get('Agile PM/Tasks/Continue the Agile PM workflow.md')).toContain('  - "[[Sprint 2]]"');
+    expect([...written.keys()].filter((path) => path.startsWith('Agile PM/Tasks/'))).toHaveLength(7);
     expect(written.get('Agile PM/Tasks/Plan work into the current sprint.md')).not.toContain('status:');
     expect(written.get('Agile PM/Projects/Welcome to Agile PM.md')).not.toContain('status:');
     expect(app.vault.create).not.toHaveBeenCalledWith(
@@ -177,6 +181,67 @@ describe('SprintBaseGenerator', () => {
       expect.stringContaining('showCompleted: true'),
     );
     expect(written.get(path)).toContain('showCompleted: true');
+  });
+
+  it('assigns Sprint 1 to an edited sample task without replacing its properties', async () => {
+    const taskPath = 'Agile PM/Tasks/Review the Agile PM dashboard.md';
+    const taskFile = { path: taskPath };
+    const existing = new Set<string>([taskPath]);
+    const folders = new Set<string>();
+    const properties: Record<string, unknown> = {
+      estimate: 8,
+      'in progress': true,
+      'is done': false,
+    };
+    const modify = jest.fn();
+    const app = {
+      vault: {
+        configDir: '.obsidian',
+        adapter: {
+          exists: jest.fn(async () => false),
+          read: jest.fn(async () => '{}'),
+          write: jest.fn(),
+        },
+        getAbstractFileByPath: jest.fn((path: string) => (
+          existing.has(path) || folders.has(path) ? { path } : null
+        )),
+        getFileByPath: jest.fn((path: string) => (path === taskPath ? taskFile : null)),
+        getMarkdownFiles: jest.fn(() => []),
+        read: jest.fn(async () => '# User-edited task\n'),
+        modify,
+        delete: jest.fn(),
+        createFolder: jest.fn(async (path: string) => {
+          folders.add(path);
+        }),
+        create: jest.fn(async (path: string) => {
+          existing.add(path);
+          return { path };
+        }),
+      },
+      metadataCache: {
+        getFileCache: jest.fn((file: { path: string }) => (
+          file.path === taskPath ? { frontmatter: properties } : null
+        )),
+      },
+      fileManager: {
+        processFrontMatter: jest.fn(async (
+          _file: { path: string },
+          mutation: (frontmatter: Record<string, unknown>) => void,
+        ) => mutation(properties)),
+      },
+    };
+
+    await new SprintBaseGenerator(app as never).generate(
+      normalizeSprintSettings({ enabled: true, rootFolder: 'Agile PM' }),
+    );
+
+    expect(properties).toEqual({
+      estimate: 8,
+      'in progress': true,
+      'is done': false,
+      sprint: ['[[Sprint 1]]'],
+    });
+    expect(modify).not.toHaveBeenCalledWith(taskFile, expect.any(String));
   });
 
   it('does not modify existing unmarked AI instruction files', async () => {

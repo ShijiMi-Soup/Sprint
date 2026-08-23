@@ -36,7 +36,10 @@ interface TaskSummary {
 interface SampleNote {
   path: string;
   content: string;
+  sprintName?: string;
 }
+
+type SampleVersion = 'legacy' | 'current';
 
 const MANAGED_START = '<!-- sprint-managed-start -->';
 const MANAGED_END = '<!-- sprint-managed-end -->';
@@ -619,14 +622,39 @@ export class SprintBaseGenerator {
     const root = normalizeFolder(resolved.rootFolder);
     if (!root) return;
 
-    for (const note of this.sampleNotes(root)) {
-      if (this.app.vault.getAbstractFileByPath(note.path)) continue;
+    const previousSamples = new Map(
+      this.sampleNotes(root, resolved.namingFormat, 'legacy').map((note) => [note.path, note]),
+    );
+    for (const note of this.sampleNotes(root, resolved.namingFormat, 'current')) {
+      const existing = this.app.vault.getFileByPath(note.path);
+      if (existing) {
+        const previous = previousSamples.get(note.path);
+        const current = await this.app.vault.read(existing);
+        if (previous && previous.content !== note.content && current === previous.content) {
+          await this.app.vault.modify(existing, note.content);
+        } else if (note.sprintName) {
+          await this.assignSampleSprintIfMissing(existing, note.sprintName);
+        }
+        continue;
+      }
       await this.writeFile(note.path, note.content);
     }
   }
 
-  private sampleNotes(root: string): SampleNote[] {
-    return [
+  private sampleNotes(
+    root: string,
+    namingFormat: string,
+    version: SampleVersion,
+  ): SampleNote[] {
+    const sprintName = (number: number): string => (
+      namingFormat.replaceAll('{number}', String(number)).trim() || `Sprint ${number}`
+    );
+    const sprintOne = sprintName(1);
+    const sprintTwo = sprintName(2);
+    const sprintProperty = (name: string): string[] => version === 'current'
+      ? ['sprint:', `  - "[[${name}]]"`]
+      : [];
+    const notes: SampleNote[] = [
       {
         path: `${root}/Projects/Welcome to Agile PM.md`,
         content: frontmatterNote(
@@ -670,6 +698,7 @@ export class SprintBaseGenerator {
             'is done: false',
             'project:',
             '  - "[[Welcome to Agile PM]]"',
+            ...sprintProperty(sprintOne),
           ],
           [
             '# Review the Agile PM dashboard',
@@ -677,6 +706,7 @@ export class SprintBaseGenerator {
             'Open the dashboard note at the top of this folder and inspect the current tasks, Velocity chart, current sprint scope, and Projects view.',
           ].join('\n'),
         ),
+        sprintName: sprintOne,
       },
       {
         path: `${root}/Tasks/Add your first real task.md`,
@@ -687,13 +717,17 @@ export class SprintBaseGenerator {
             'is done: false',
             'project:',
             '  - "[[Welcome to Agile PM]]"',
+            ...sprintProperty(sprintOne),
           ],
           [
             '# Add your first real task',
             '',
-            'Create a task note in the Tasks folder. Give it an estimate, connect it to a project, and leave `sprint` empty until you are ready to plan it.',
+            version === 'current'
+              ? 'Create a task note in the Tasks folder. Give it an estimate, connect it to a project, and assign it to a generated sprint when you are ready to plan it.'
+              : 'Create a task note in the Tasks folder. Give it an estimate, connect it to a project, and leave `sprint` empty until you are ready to plan it.',
           ].join('\n'),
         ),
+        sprintName: sprintOne,
       },
       {
         path: `${root}/Tasks/Plan work into the current sprint.md`,
@@ -704,6 +738,7 @@ export class SprintBaseGenerator {
             'is done: false',
             'project:',
             '  - "[[Sprint system setup]]"',
+            ...sprintProperty(sprintOne),
           ],
           [
             '# Plan work into the current sprint',
@@ -711,6 +746,7 @@ export class SprintBaseGenerator {
             'Use the Tasks Base to assign a task to the generated current sprint. Sprint creates sprint notes and keeps their status metadata synchronized.',
           ].join('\n'),
         ),
+        sprintName: sprintOne,
       },
       {
         path: `${root}/Tasks/Mark a task complete.md`,
@@ -721,6 +757,7 @@ export class SprintBaseGenerator {
             'is done: true',
             'project:',
             '  - "[[Sprint system setup]]"',
+            ...sprintProperty(sprintOne),
           ],
           [
             '# Mark a task complete',
@@ -728,6 +765,7 @@ export class SprintBaseGenerator {
             'Set `is done` to true when the task is finished. Completed estimates contribute to the Velocity view in the Sprints Base.',
           ].join('\n'),
         ),
+        sprintName: sprintOne,
       },
       {
         path: `${root}/Tasks/Write a sprint review.md`,
@@ -738,6 +776,7 @@ export class SprintBaseGenerator {
             'is done: false',
             'project:',
             '  - "[[Sprint system setup]]"',
+            ...sprintProperty(sprintOne),
           ],
           [
             '# Write a sprint review',
@@ -745,8 +784,62 @@ export class SprintBaseGenerator {
             'At the end of a sprint, summarize outcomes in the generated sprint note. Keep retrospectives concrete and action-oriented.',
           ].join('\n'),
         ),
+        sprintName: sprintOne,
       },
     ];
+
+    if (version === 'current') {
+      notes.push(
+        {
+          path: `${root}/Tasks/Plan next week's sprint.md`,
+          content: frontmatterNote(
+            [
+              'estimate: 2',
+              'in progress: false',
+              'is done: false',
+              'project:',
+              '  - "[[Sprint system setup]]"',
+              ...sprintProperty(sprintTwo),
+            ],
+            [
+              "# Plan next week's sprint",
+              '',
+              'Review what was learned in Sprint 1, confirm the next priorities, and keep the Sprint 2 scope small enough to finish.',
+            ].join('\n'),
+          ),
+          sprintName: sprintTwo,
+        },
+        {
+          path: `${root}/Tasks/Continue the Agile PM workflow.md`,
+          content: frontmatterNote(
+            [
+              'estimate: 3',
+              'in progress: false',
+              'is done: false',
+              'project:',
+              '  - "[[Welcome to Agile PM]]"',
+              ...sprintProperty(sprintTwo),
+            ],
+            [
+              '# Continue the Agile PM workflow',
+              '',
+              'Carry one useful improvement into Sprint 2 and update its task state on the Sprint board as the work progresses.',
+            ].join('\n'),
+          ),
+          sprintName: sprintTwo,
+        },
+      );
+    }
+
+    return notes;
+  }
+
+  private async assignSampleSprintIfMissing(file: TFile, sprintName: string): Promise<void> {
+    const frontmatter = this.app.metadataCache.getFileCache(file)?.frontmatter;
+    if (!frontmatter || frontmatter.sprint !== undefined) return;
+    await this.app.fileManager.processFrontMatter(file, (properties) => {
+      if (properties.sprint === undefined) properties.sprint = [`[[${sprintName}]]`];
+    });
   }
 
   private async writeDashboard(settings: SprintSettings, profile: SprintProfile): Promise<void> {
