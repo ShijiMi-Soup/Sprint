@@ -68,6 +68,7 @@ describe('SprintBaseGenerator', () => {
     expect(written.get('Agile PM/Bases/Projects.base')).not.toContain('note.status');
     expect(written.get('Agile PM/Agile PM.md')).toContain('## Velocity');
     expect(written.get('Agile PM/Agile PM.md')).toContain('![[Agile PM/Bases/Tasks.base#Current sprint]]');
+    expect(written.get('Agile PM/Agile PM.md')).toContain('![[Agile PM/Bases/Tasks.base#Next sprint]]');
     expect(written.get('Agile PM/Agile PM.md')).not.toContain('- [ ]');
     expect(written.get('Agile PM/Agile PM.md')).toContain('![[Agile PM/Bases/Sprints.base#Velocity]]');
     expect(written.get('Agile PM/Agile PM.md')).not.toContain('```mermaid');
@@ -335,8 +336,11 @@ describe('SprintBaseGenerator', () => {
     expect(written.get('Agile PM/Bases/Tasks.base')).toContain('layout: "kanban"');
     expect(written.get('Agile PM/Bases/Tasks.base')).toContain('showCompleted: true');
     expect(written.get('Agile PM/Bases/Tasks.base')).toContain('name: "Current sprint"');
+    expect(written.get('Agile PM/Bases/Tasks.base')).toContain('name: "Next sprint"');
     expect(written.get('Agile PM/Bases/Tasks.base')).toContain('is_current_sprint: note.sprint.filter');
+    expect(written.get('Agile PM/Bases/Tasks.base')).toContain('is_next_sprint: note.sprint.filter');
     expect(written.get('Agile PM/Bases/Tasks.base')).toContain('- formula.is_current_sprint');
+    expect(written.get('Agile PM/Bases/Tasks.base')).toContain('- formula.is_next_sprint');
     expect(written.get('Agile PM/Bases/Tasks.base')).not.toContain('note.status');
   });
 

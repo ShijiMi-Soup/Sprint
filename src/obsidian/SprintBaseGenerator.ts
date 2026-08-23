@@ -32,6 +32,7 @@ interface SampleNote {
 }
 
 type SampleVersion = 'legacy' | 'current';
+type SprintTaskScope = 'current' | 'next';
 
 const MANAGED_START = '<!-- sprint-managed-start -->';
 const MANAGED_END = '<!-- sprint-managed-end -->';
@@ -184,15 +185,15 @@ function sprintView(
   name: string,
   layout: 'board' | 'list' | 'kanban',
   showCompleted: boolean,
-  currentSprintOnly = false,
+  sprintScope?: SprintTaskScope,
 ): string[] {
   return [
     `  - type: ${SPRINT_BASES_VIEW_TYPE}`,
     `    name: ${yamlString(name)}`,
-    ...(currentSprintOnly ? [
+    ...(sprintScope ? [
       '    filters:',
       '      and:',
-      '        - formula.is_current_sprint',
+      `        - formula.is_${sprintScope}_sprint`,
     ] : []),
     ...(layout === 'kanban' ? [
       '    groupBy:',
@@ -245,6 +246,7 @@ function tasksBaseContent(
   includeSprintBoard: boolean,
   showCompleted = true,
   includeCurrentSprintView = includeSprintBoard,
+  includeNextSprintView = includeCurrentSprintView,
 ): string {
   const resolved = resolveSprintProfile(settings, profile);
   const root = normalizeFolder(resolved.rootFolder);
@@ -265,13 +267,19 @@ function tasksBaseContent(
         ? sprintView(resolved.id, 'Sprint board', 'kanban', showCompleted)
         : []),
       ...(includeCurrentSprintView
-        ? sprintView(resolved.id, 'Current sprint', 'kanban', true, true)
+        ? sprintView(resolved.id, 'Current sprint', 'kanban', true, 'current')
+        : []),
+      ...(includeNextSprintView
+        ? sprintView(resolved.id, 'Next sprint', 'kanban', true, 'next')
         : []),
     ],
     {
       task_state: 'if(note["is done"], "Done", if(note["in progress"], "In progress", "Not started"))',
       ...(includeCurrentSprintView ? {
         is_current_sprint: 'note.sprint.filter(value.asFile().properties["sprint status"] == "current").length > 0',
+      } : {}),
+      ...(includeNextSprintView ? {
+        is_next_sprint: 'note.sprint.filter(value.asFile().properties["sprint status"] == "next").length > 0',
       } : {}),
     },
   );
@@ -490,14 +498,18 @@ export class SprintBaseGenerator {
     if (!existing) return;
     const current = await this.app.vault.read(existing);
     const boardlessTemplate = tasksBaseContent(settings, profile, false);
-    const hiddenCompletedTemplate = tasksBaseContent(settings, profile, true, false, false);
-    const previousTemplate = tasksBaseContent(settings, profile, true, true, false);
-    const currentHiddenCompletedTemplate = tasksBaseContent(settings, profile, true, false, true);
+    const hiddenCompletedTemplate = tasksBaseContent(settings, profile, true, false, false, false);
+    const previousTemplate = tasksBaseContent(settings, profile, true, true, false, false);
+    const currentSprintTemplate = tasksBaseContent(settings, profile, true, true, true, false);
+    const currentHiddenCompletedTemplate = tasksBaseContent(settings, profile, true, false, true, false);
+    const allViewsHiddenCompletedTemplate = tasksBaseContent(settings, profile, true, false, true, true);
     if (
       current === boardlessTemplate
       || current === hiddenCompletedTemplate
       || current === previousTemplate
+      || current === currentSprintTemplate
       || current === currentHiddenCompletedTemplate
+      || current === allViewsHiddenCompletedTemplate
     ) {
       await this.app.vault.modify(existing, tasksBaseContent(settings, profile, true));
     }
@@ -858,6 +870,10 @@ export class SprintBaseGenerator {
       '## Current Tasks',
       '',
       `![[${resolved.tasksBasePath}#Current sprint]]`,
+      '',
+      '## Next Sprint Tasks',
+      '',
+      `![[${resolved.tasksBasePath}#Next sprint]]`,
       '',
       '## Velocity',
       '',

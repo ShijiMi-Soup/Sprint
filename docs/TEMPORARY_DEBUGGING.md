@@ -30,7 +30,7 @@ This file tracks diagnostic code that must be reviewed and removed after the rel
 - Added: 2026-08-23
 - Reason: A short-lived build generated `Bases/Sprint Board.base` and removed the Sprint board view from newly generated `Tasks.base` files.
 - Code: `src/obsidian/SprintBaseGenerator.ts`, functions `standaloneSprintBoardContent()`, `removeObsoleteSprintBoardBase()`, and `migrateTasksBase()`.
-- Behavior: Deletes the obsolete standalone Base only when it exactly matches Sprint's generated template. Restores the Tasks Base views, completed-task visibility, and Current sprint view only when the file exactly matches one of Sprint's earlier generated templates. Customized files are preserved.
+- Behavior: Deletes the obsolete standalone Base only when it exactly matches Sprint's generated template. Restores the Tasks Base views, completed-task visibility, and Current/Next sprint views only when the file exactly matches one of Sprint's earlier generated templates. Customized files are preserved.
 - Removal criteria: Supported vaults have passed through a release containing this migration, or the migration is replaced by a versioned schema migration system.
 - Removal work: Delete the compatibility content function and both migration methods/calls while retaining the normal Tasks Base template and dashboard `#Sprint board` embed.
 
