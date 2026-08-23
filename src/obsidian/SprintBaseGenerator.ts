@@ -184,7 +184,12 @@ function sprintOverviewView(profileId: string): string[] {
   ];
 }
 
-function sprintView(profileId: string, name: string, layout: 'board' | 'list' | 'kanban'): string[] {
+function sprintView(
+  profileId: string,
+  name: string,
+  layout: 'board' | 'list' | 'kanban',
+  showCompleted: boolean,
+): string[] {
   return [
     `  - type: ${SPRINT_BASES_VIEW_TYPE}`,
     `    name: ${yamlString(name)}`,
@@ -195,7 +200,7 @@ function sprintView(profileId: string, name: string, layout: 'board' | 'list' | 
     ] : []),
     `    sprintProfile: ${yamlString(profileId)}`,
     `    layout: ${yamlString(layout)}`,
-    '    showCompleted: false',
+    `    showCompleted: ${showCompleted}`,
   ];
 }
 
@@ -254,6 +259,7 @@ function tasksBaseContent(
   settings: SprintSettings,
   profile: SprintProfile,
   includeSprintBoard: boolean,
+  showCompleted = true,
 ): string {
   const resolved = resolveSprintProfile(settings, profile);
   const root = normalizeFolder(resolved.rootFolder);
@@ -270,7 +276,9 @@ function tasksBaseContent(
         'note.in progress',
         'note.is done',
       ]),
-      ...(includeSprintBoard ? sprintView(resolved.id, 'Sprint board', 'kanban') : []),
+      ...(includeSprintBoard
+        ? sprintView(resolved.id, 'Sprint board', 'kanban', showCompleted)
+        : []),
     ],
     {
       task_state: 'if(note["is done"], "Done", if(note["in progress"], "In progress", "Not started"))',
@@ -284,7 +292,7 @@ function standaloneSprintBoardContent(settings: SprintSettings, profile: SprintP
   return baseConfig(
     `${root}/Tasks`,
     taskBaseProperties(),
-    sprintView(resolved.id, 'Sprint board', 'kanban'),
+    sprintView(resolved.id, 'Sprint board', 'kanban', false),
     {
       task_state: 'if(note["is done"], "Done", if(note["in progress"], "In progress", "Not started"))',
     },
@@ -490,7 +498,9 @@ export class SprintBaseGenerator {
     const existing = this.app.vault.getFileByPath(path);
     if (!existing) return;
     const current = await this.app.vault.read(existing);
-    if (current === tasksBaseContent(settings, profile, false)) {
+    const boardlessTemplate = tasksBaseContent(settings, profile, false);
+    const hiddenCompletedTemplate = tasksBaseContent(settings, profile, true, false);
+    if (current === boardlessTemplate || current === hiddenCompletedTemplate) {
       await this.app.vault.modify(existing, tasksBaseContent(settings, profile, true));
     }
   }

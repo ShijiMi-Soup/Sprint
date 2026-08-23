@@ -28,6 +28,7 @@ Commit: `cde1ede` (`Add Agile PM workspace generation and custom Bases views`)
 - Dashboard Base embeds can select named views with `#Sprint board` and `#Velocity`.
 - The Tasks Base remains the default table while its Sprint board view is used by the dashboard.
 - Task estimate labels now have spacing, remain inside their task cards, and use subdued translucent colors.
+- Completed tasks remain visible in the Sprint board so they can be dragged back to another state.
 
 ### Design decisions
 

@@ -123,6 +123,62 @@ describe('SprintBaseGenerator', () => {
     expect(written.get('CLAUDE.md')).toContain('sprint-managed-start');
   });
 
+  it('migrates a generated Tasks Base so completed cards remain visible', async () => {
+    const existing = new Set<string>();
+    const folders = new Set<string>();
+    const written = new Map<string, string>();
+    const modify = jest.fn(async (file: { path: string }, content: string) => {
+      written.set(file.path, content);
+    });
+    const app = {
+      vault: {
+        configDir: '.obsidian',
+        adapter: {
+          exists: jest.fn(async () => false),
+          read: jest.fn(async () => '{}'),
+          write: jest.fn(),
+        },
+        getAbstractFileByPath: jest.fn((path: string) => (
+          existing.has(path) || folders.has(path) ? { path } : null
+        )),
+        getFileByPath: jest.fn((path: string) => (existing.has(path) ? { path } : null)),
+        getMarkdownFiles: jest.fn(() => []),
+        read: jest.fn(async (file: { path: string }) => written.get(file.path) ?? ''),
+        modify,
+        delete: jest.fn(async (file: { path: string }) => {
+          existing.delete(file.path);
+          written.delete(file.path);
+        }),
+        createFolder: jest.fn(async (path: string) => {
+          folders.add(path);
+        }),
+        create: jest.fn(async (path: string, content: string) => {
+          existing.add(path);
+          written.set(path, content);
+          return { path };
+        }),
+      },
+      metadataCache: { getFileCache: jest.fn(() => null) },
+    };
+    const generator = new SprintBaseGenerator(app as never);
+    const settings = normalizeSprintSettings({ enabled: true, rootFolder: 'Agile PM' });
+    const path = 'Agile PM/Bases/Tasks.base';
+
+    await generator.generate(settings);
+    const generated = written.get(path);
+    expect(generated).toBeDefined();
+    written.set(path, generated!.replace('showCompleted: true', 'showCompleted: false'));
+    modify.mockClear();
+
+    await generator.generate(settings);
+
+    expect(modify).toHaveBeenCalledWith(
+      expect.objectContaining({ path }),
+      expect.stringContaining('showCompleted: true'),
+    );
+    expect(written.get(path)).toContain('showCompleted: true');
+  });
+
   it('does not modify existing unmarked AI instruction files', async () => {
     const existing = new Set<string>(['Agile PM/AGENTS.md']);
     const modify = jest.fn();
@@ -211,6 +267,7 @@ describe('SprintBaseGenerator', () => {
     expect(written.has('Agile PM/Bases/Sprints.base')).toBe(true);
     expect(written.get('Agile PM/Bases/Tasks.base')).toContain('task_state: if(note["is done"], "Done", if(note["in progress"], "In progress", "Not started"))');
     expect(written.get('Agile PM/Bases/Tasks.base')).toContain('layout: "kanban"');
+    expect(written.get('Agile PM/Bases/Tasks.base')).toContain('showCompleted: true');
     expect(written.get('Agile PM/Bases/Tasks.base')).not.toContain('note.status');
   });
 
