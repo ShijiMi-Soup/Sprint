@@ -5,6 +5,7 @@ import {
   createSprintVelocityViewRegistration,
   getEstimateTone,
   getSprintBasesOptions,
+  getTaskProjectGroup,
 } from '@/obsidian/SprintBasesView';
 
 describe('SprintBasesView', () => {
@@ -72,5 +73,14 @@ describe('SprintBasesView', () => {
       'is done': done,
       estimate: 3,
     });
+  });
+
+  it.each([
+    [{ project: ['[[Projects/Research project]]'] }, 'Research project'],
+    [{ project: '[[Projects/Internal|Internal tools]]' }, 'Internal tools'],
+    [{ project: [] }, 'No project'],
+    [{}, 'No project'],
+  ])('resolves task project swimlanes', (frontmatter, expected) => {
+    expect(getTaskProjectGroup(frontmatter)).toBe(expected);
   });
 });

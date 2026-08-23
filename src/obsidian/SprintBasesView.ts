@@ -1,4 +1,10 @@
-import type { BasesAllOptions, BasesViewRegistration, QueryController, TFile } from 'obsidian';
+import type {
+  BasesAllOptions,
+  BasesEntry,
+  BasesViewRegistration,
+  QueryController,
+  TFile,
+} from 'obsidian';
 import { BasesView, Notice } from 'obsidian';
 
 import type { SprintSettings } from '../domain/types';
@@ -8,6 +14,7 @@ export const SPRINT_VELOCITY_VIEW_TYPE = 'sprint-agent-velocity-chart';
 const TASK_DRAG_TYPE = 'application/x-sprint-task-path';
 
 export type TaskBoardState = 'Not started' | 'In progress' | 'Done';
+const TASK_STATES: TaskBoardState[] = ['Not started', 'In progress', 'Done'];
 
 export function applyTaskBoardState(
   frontmatter: Record<string, unknown>,
@@ -15,6 +22,21 @@ export function applyTaskBoardState(
 ): void {
   frontmatter['in progress'] = state === 'In progress';
   frontmatter['is done'] = state === 'Done';
+}
+
+export function getTaskProjectGroup(
+  frontmatter: Record<string, unknown> | undefined,
+): string {
+  const rawProject = frontmatter?.project;
+  const values = Array.isArray(rawProject) ? rawProject : [rawProject];
+  const project = values.find((value): value is string => (
+    typeof value === 'string' && value.trim().length > 0
+  ));
+  if (!project) return 'No project';
+
+  const normalized = project.trim().replace(/^\[\[/, '').replace(/\]\]$/, '');
+  const [target = '', alias] = normalized.split('|');
+  return alias?.trim() || target.split('/').at(-1)?.trim() || 'No project';
 }
 
 export function getSprintBasesOptions(
@@ -86,6 +108,7 @@ class SprintBasesView extends BasesView {
   private readonly embedded: boolean;
   private draggedTaskPath: string | null = null;
   private draggedTaskEl: HTMLElement | null = null;
+  private draggedProjectGroup: string | null = null;
 
   constructor(
     controller: QueryController,
@@ -157,11 +180,7 @@ class SprintBasesView extends BasesView {
   }
 
   private renderKanban(content: HTMLElement, showCompleted: boolean): void {
-    const columns = [
-      { key: 'Not started' as const, entries: [] as typeof this.data.groupedData[number]['entries'] },
-      { key: 'In progress' as const, entries: [] as typeof this.data.groupedData[number]['entries'] },
-      { key: 'Done' as const, entries: [] as typeof this.data.groupedData[number]['entries'] },
-    ];
+    const projects = new Map<string, Map<TaskBoardState, BasesEntry[]>>();
     const seen = new Set<string>();
     for (const group of this.data.groupedData) {
       for (const entry of group.entries) {
@@ -169,77 +188,109 @@ class SprintBasesView extends BasesView {
         seen.add(entry.file.path);
         const frontmatter = this.app.metadataCache.getFileCache(entry.file)?.frontmatter;
         if (!showCompleted && isDone(frontmatter)) continue;
-        columns.find(({ key }) => key === taskState(frontmatter))?.entries.push(entry);
+        const project = getTaskProjectGroup(frontmatter);
+        const columns = projects.get(project) ?? new Map(
+          TASK_STATES.map((state) => [state, [] as BasesEntry[]]),
+        );
+        columns.get(taskState(frontmatter))?.push(entry);
+        projects.set(project, columns);
       }
     }
 
-    for (const column of columns) {
-      const section = content.createDiv({
-        cls: 'sprint-bases-group',
-        attr: { 'data-task-state': column.key },
+    const sortedProjects = [...projects.entries()].sort(([left], [right]) => {
+      if (left === 'No project') return 1;
+      if (right === 'No project') return -1;
+      return left.localeCompare(right);
+    });
+    if (sortedProjects.length === 0) {
+      content.createDiv({ cls: 'sprint-bases-empty', text: 'No tasks match this view.' });
+      return;
+    }
+
+    for (const [project, columns] of sortedProjects) {
+      const projectSection = content.createDiv({ cls: 'sprint-bases-project' });
+      const projectHeader = projectSection.createDiv({ cls: 'sprint-bases-project-header' });
+      projectHeader.createEl('h4', { text: project });
+      projectHeader.createSpan({
+        cls: 'sprint-bases-project-count',
+        text: String([...columns.values()].reduce((total, entries) => total + entries.length, 0)),
       });
-      section.createEl('h4', { text: column.key });
-      const entries = section.createDiv({ cls: 'sprint-bases-entries' });
-      this.registerDropTarget(section, entries, column.key);
-      if (column.entries.length === 0) {
-        entries.createDiv({ cls: 'sprint-bases-empty', text: 'No tasks' });
-      }
-      for (const entry of column.entries) {
-        const frontmatter = this.app.metadataCache.getFileCache(entry.file)?.frontmatter;
-        const link = entries.createEl('button', {
-          cls: 'sprint-bases-entry',
-          attr: {
-            type: 'button',
-            draggable: 'true',
-            'data-task-path': entry.file.path,
-            'aria-label': `${entry.file.basename}. Drag to change task state.`,
-          },
+      const board = projectSection.createDiv({ cls: 'sprint-bases-project-board' });
+      for (const state of TASK_STATES) {
+        const section = board.createDiv({
+          cls: 'sprint-bases-group',
+          attr: { 'data-task-state': state, 'data-project-group': project },
         });
-        link.createSpan({ cls: 'sprint-bases-entry-title', text: entry.file.basename });
-        const points = estimate(frontmatter);
-        if (points > 0) {
-          const meta = link.createSpan({ cls: 'sprint-bases-entry-meta' });
-          meta.createSpan({
-            cls: `sprint-bases-entry-points sprint-bases-entry-points--${getEstimateTone(points)}`,
-            text: `${points} pt`,
-          });
+        section.createEl('h5', { text: state });
+        const entries = section.createDiv({ cls: 'sprint-bases-entries' });
+        this.registerDropTarget(section, entries, state, project);
+        const stateEntries = columns.get(state) ?? [];
+        if (stateEntries.length === 0) {
+          entries.createDiv({ cls: 'sprint-bases-empty', text: 'No tasks' });
         }
-        let dragged = false;
-        link.addEventListener('dragstart', (event) => {
-          dragged = true;
-          this.draggedTaskPath = entry.file.path;
-          this.draggedTaskEl = link;
-          link.classList.add('is-dragging');
-          if (event.dataTransfer) {
-            event.dataTransfer.effectAllowed = 'move';
-            event.dataTransfer.setData(TASK_DRAG_TYPE, entry.file.path);
-            event.dataTransfer.setData('text/plain', entry.file.path);
-          }
-        });
-        link.addEventListener('dragend', () => {
-          this.clearDragState();
-          link.ownerDocument.defaultView?.setTimeout(() => {
-            dragged = false;
-          }, 0);
-        });
-        link.addEventListener('click', (event) => {
-          if (dragged) {
-            event.preventDefault();
-            return;
-          }
-          void this.app.workspace.openLinkText(entry.file.path, '', false);
-        });
+        for (const entry of stateEntries) {
+          this.renderTaskCard(entries, entry, project);
+        }
       }
     }
+  }
+
+  private renderTaskCard(entries: HTMLElement, entry: BasesEntry, project: string): void {
+    const frontmatter = this.app.metadataCache.getFileCache(entry.file)?.frontmatter;
+    const link = entries.createEl('button', {
+      cls: 'sprint-bases-entry',
+      attr: {
+        type: 'button',
+        draggable: 'true',
+        'data-task-path': entry.file.path,
+        'aria-label': `${entry.file.basename}. Drag to change task state.`,
+      },
+    });
+    link.createSpan({ cls: 'sprint-bases-entry-title', text: entry.file.basename });
+    const points = estimate(frontmatter);
+    if (points > 0) {
+      const meta = link.createSpan({ cls: 'sprint-bases-entry-meta' });
+      meta.createSpan({
+        cls: `sprint-bases-entry-points sprint-bases-entry-points--${getEstimateTone(points)}`,
+        text: `${points} pt`,
+      });
+    }
+    let dragged = false;
+    link.addEventListener('dragstart', (event) => {
+      dragged = true;
+      this.draggedTaskPath = entry.file.path;
+      this.draggedTaskEl = link;
+      this.draggedProjectGroup = project;
+      link.classList.add('is-dragging');
+      if (event.dataTransfer) {
+        event.dataTransfer.effectAllowed = 'move';
+        event.dataTransfer.setData(TASK_DRAG_TYPE, entry.file.path);
+        event.dataTransfer.setData('text/plain', entry.file.path);
+      }
+    });
+    link.addEventListener('dragend', () => {
+      this.clearDragState();
+      link.ownerDocument.defaultView?.setTimeout(() => {
+        dragged = false;
+      }, 0);
+    });
+    link.addEventListener('click', (event) => {
+      if (dragged) {
+        event.preventDefault();
+        return;
+      }
+      void this.app.workspace.openLinkText(entry.file.path, '', false);
+    });
   }
 
   private registerDropTarget(
     section: HTMLElement,
     entries: HTMLElement,
     state: TaskBoardState,
+    project: string,
   ): void {
     section.addEventListener('dragover', (event) => {
-      if (!this.draggedTaskPath) return;
+      if (!this.draggedTaskPath || this.draggedProjectGroup !== project) return;
       event.preventDefault();
       if (event.dataTransfer) event.dataTransfer.dropEffect = 'move';
       section.classList.add('is-drop-target');
@@ -256,7 +307,7 @@ class SprintBasesView extends BasesView {
       event.stopPropagation();
       section.classList.remove('is-drop-target');
       const path = event.dataTransfer?.getData(TASK_DRAG_TYPE) || this.draggedTaskPath;
-      if (!path) return;
+      if (!path || this.draggedProjectGroup !== project) return;
       void this.moveTask(path, state, entries);
     });
   }
@@ -324,6 +375,7 @@ class SprintBasesView extends BasesView {
     });
     this.draggedTaskPath = null;
     this.draggedTaskEl = null;
+    this.draggedProjectGroup = null;
   }
 }
 

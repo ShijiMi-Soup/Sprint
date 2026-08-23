@@ -18,6 +18,7 @@ Related commits:
 - Drag-and-drop task state changes between all three Sprint board columns.
 - A Current sprint Kanban view backed by the linked sprint note's lifecycle status.
 - A Next sprint Kanban view for previewing and updating the upcoming sprint's tasks.
+- Project swimlanes across all Kanban task views, with unassigned tasks grouped under No project.
 - A native Velocity chart view without requiring a third-party Obsidian chart plugin.
 - Estimate badges inside task cards with warning colors: 1-2 points green, 3-4 yellow, 5-6 orange, and 7 or more red.
 - Profile-local `AGENTS.md`, `CLAUDE.md`, and skill files for external AI tools.

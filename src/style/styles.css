@@ -20,11 +20,49 @@
   font-size: var(--font-ui-small);
 }
 
-.sprint-bases-board,
-.sprint-bases-kanban {
+.sprint-bases-board {
   display: grid;
   gap: var(--size-4-3);
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.sprint-bases-kanban {
+  display: grid;
+  gap: var(--size-4-5);
+}
+
+.sprint-bases-project {
+  border-bottom: 1px solid var(--background-modifier-border);
+  min-width: 0;
+  padding-bottom: var(--size-4-5);
+}
+
+.sprint-bases-project:last-child {
+  border-bottom: 0;
+}
+
+.sprint-bases-project-header {
+  align-items: baseline;
+  display: flex;
+  gap: var(--size-4-2);
+  margin-bottom: var(--size-4-2);
+}
+
+.sprint-bases-project-header h4,
+.sprint-bases-group h5 {
+  margin: 0;
+}
+
+.sprint-bases-project-count {
+  color: var(--text-muted);
+  font-size: var(--font-ui-small);
+}
+
+.sprint-bases-project-board {
+  display: grid;
+  gap: var(--size-4-3);
+  grid-template-columns: repeat(3, minmax(180px, 1fr));
+  overflow-x: auto;
 }
 
 .sprint-bases-kanban .sprint-bases-group {
@@ -33,6 +71,10 @@
   border-radius: 8px;
   padding: var(--size-4-2);
   transition: background-color 120ms ease, border-color 120ms ease;
+}
+
+.sprint-bases-kanban .sprint-bases-group h5 {
+  font-size: var(--font-ui-medium);
 }
 
 .sprint-bases-kanban .sprint-bases-group.is-drop-target {
