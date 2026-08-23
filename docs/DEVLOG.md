@@ -2,7 +2,11 @@
 
 ## 2026-08-23 - Agile PM workspace and custom Bases views
 
-Commit: `cde1ede` (`Add Agile PM workspace generation and custom Bases views`)
+Related commits:
+
+- `cde1ede` - Add Agile PM workspace generation and custom Bases views.
+- `51bbe86` - Add Sprint board drag and drop.
+- `5590f0f` - Keep completed tasks visible on the Sprint board.
 
 ### Added
 
