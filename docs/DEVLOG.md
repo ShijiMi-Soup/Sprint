@@ -16,6 +16,7 @@ Related commits:
 - An `Agile PM.md` dashboard showing the current sprint, current tasks, Sprint board, Velocity, and projects.
 - A three-column Sprint board for Not started, In progress, and Done tasks.
 - Drag-and-drop task state changes between all three Sprint board columns.
+- A Current sprint Kanban view backed by the linked sprint note's lifecycle status.
 - A native Velocity chart view without requiring a third-party Obsidian chart plugin.
 - Estimate badges inside task cards with warning colors: 1-2 points green, 3-4 yellow, 5-6 orange, and 7 or more red.
 - Profile-local `AGENTS.md`, `CLAUDE.md`, and skill files for external AI tools.
@@ -34,6 +35,7 @@ Related commits:
 - The Tasks Base remains the default table while its Sprint board view is used by the dashboard.
 - Task estimate labels now have spacing, remain inside their task cards, and use subdued translucent colors.
 - Completed tasks remain visible in the Sprint board so they can be dragged back to another state.
+- The dashboard's duplicate Markdown task checklist was removed in favor of the interactive Current sprint view.
 
 ### Design decisions
 

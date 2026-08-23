@@ -25,14 +25,6 @@ interface SprintSummary {
   status: string | null;
 }
 
-interface TaskSummary {
-  name: string;
-  path: string;
-  sprint: unknown;
-  estimate: number;
-  done: boolean;
-}
-
 interface SampleNote {
   path: string;
   content: string;
@@ -192,10 +184,16 @@ function sprintView(
   name: string,
   layout: 'board' | 'list' | 'kanban',
   showCompleted: boolean,
+  currentSprintOnly = false,
 ): string[] {
   return [
     `  - type: ${SPRINT_BASES_VIEW_TYPE}`,
     `    name: ${yamlString(name)}`,
+    ...(currentSprintOnly ? [
+      '    filters:',
+      '      and:',
+      '        - formula.is_current_sprint',
+    ] : []),
     ...(layout === 'kanban' ? [
       '    groupBy:',
       '      property: formula.task_state',
@@ -213,23 +211,6 @@ function linkTo(path: string, label: string): string {
 
 function readDate(value: unknown): string | null {
   return typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : null;
-}
-
-function sprintReferences(value: unknown, sprintName: string): boolean {
-  const values = Array.isArray(value) ? value : [value];
-  return values.some((entry) => {
-    if (typeof entry !== 'string') return false;
-    const normalized = entry.trim().replace(/^\[\[/, '').replace(/\]\]$/, '').split('|')[0] ?? '';
-    return normalized === sprintName || normalized.endsWith(`/${sprintName}`);
-  });
-}
-
-function isTaskDone(frontmatter: Record<string, unknown>): boolean {
-  return frontmatter['is done'] === true;
-}
-
-function numericEstimate(value: unknown): number {
-  return typeof value === 'number' && Number.isFinite(value) ? Math.max(0, value) : 0;
 }
 
 function managedContent(content: string): string {
@@ -263,6 +244,7 @@ function tasksBaseContent(
   profile: SprintProfile,
   includeSprintBoard: boolean,
   showCompleted = true,
+  includeCurrentSprintView = includeSprintBoard,
 ): string {
   const resolved = resolveSprintProfile(settings, profile);
   const root = normalizeFolder(resolved.rootFolder);
@@ -282,9 +264,15 @@ function tasksBaseContent(
       ...(includeSprintBoard
         ? sprintView(resolved.id, 'Sprint board', 'kanban', showCompleted)
         : []),
+      ...(includeCurrentSprintView
+        ? sprintView(resolved.id, 'Current sprint', 'kanban', true, true)
+        : []),
     ],
     {
       task_state: 'if(note["is done"], "Done", if(note["in progress"], "In progress", "Not started"))',
+      ...(includeCurrentSprintView ? {
+        is_current_sprint: 'note.sprint.filter(value.asFile().properties["sprint status"] == "current").length > 0',
+      } : {}),
     },
   );
 }
@@ -502,8 +490,15 @@ export class SprintBaseGenerator {
     if (!existing) return;
     const current = await this.app.vault.read(existing);
     const boardlessTemplate = tasksBaseContent(settings, profile, false);
-    const hiddenCompletedTemplate = tasksBaseContent(settings, profile, true, false);
-    if (current === boardlessTemplate || current === hiddenCompletedTemplate) {
+    const hiddenCompletedTemplate = tasksBaseContent(settings, profile, true, false, false);
+    const previousTemplate = tasksBaseContent(settings, profile, true, true, false);
+    const currentHiddenCompletedTemplate = tasksBaseContent(settings, profile, true, false, true);
+    if (
+      current === boardlessTemplate
+      || current === hiddenCompletedTemplate
+      || current === previousTemplate
+      || current === currentHiddenCompletedTemplate
+    ) {
       await this.app.vault.modify(existing, tasksBaseContent(settings, profile, true));
     }
   }
@@ -851,15 +846,7 @@ export class SprintBaseGenerator {
     const title = root.split('/').at(-1) || resolved.name || 'Agile PM';
     const dashboardPath = `${root}/${title}.md`;
     const sprints = this.readSprints(`${root}/Sprints`);
-    const tasks = this.readTasks(`${root}/Tasks`);
     const current = sprints.find((sprint) => sprint.status === 'current') ?? null;
-    const currentTasks = current
-      ? tasks.filter((task) => sprintReferences(task.sprint, current.name))
-      : [];
-    const incompleteCurrentTasks = currentTasks.filter((task) => !task.done);
-    const taskLines = incompleteCurrentTasks.length > 0
-      ? incompleteCurrentTasks.map((task) => `- [ ] ${linkTo(task.path, task.name)}${task.estimate ? ` (${task.estimate})` : ''}`)
-      : ['- No open tasks assigned to the current sprint.'];
 
     const content = [
       '## Current Sprint',
@@ -870,9 +857,7 @@ export class SprintBaseGenerator {
       '',
       '## Current Tasks',
       '',
-      ...taskLines,
-      '',
-      `![[${resolved.tasksBasePath}#Sprint board]]`,
+      `![[${resolved.tasksBasePath}#Current sprint]]`,
       '',
       '## Velocity',
       '',
@@ -899,22 +884,6 @@ export class SprintBaseGenerator {
           startDate: readDate(frontmatter['start date']),
           endDate: readDate(frontmatter['end date']),
           status: typeof frontmatter['sprint status'] === 'string' ? frontmatter['sprint status'] : null,
-        };
-      });
-  }
-
-  private readTasks(folder: string): TaskSummary[] {
-    const prefix = `${normalizeFolder(folder)}/`;
-    return this.app.vault.getMarkdownFiles()
-      .filter((file) => file.path.startsWith(prefix) && !file.path.slice(prefix.length).includes('/'))
-      .map((file) => {
-        const frontmatter = this.getFrontmatter(file);
-        return {
-          name: file.basename,
-          path: file.path,
-          sprint: frontmatter.sprint,
-          estimate: numericEstimate(frontmatter.estimate),
-          done: isTaskDone(frontmatter),
         };
       });
   }
