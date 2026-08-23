@@ -1,5 +1,6 @@
 import { normalizeSprintSettings } from '@/domain/SprintSettings';
 import {
+  applyTaskBoardState,
   createSprintBasesViewRegistration,
   createSprintVelocityViewRegistration,
   getEstimateTone,
@@ -51,5 +52,25 @@ describe('SprintBasesView', () => {
     expect([3, 4].map(getEstimateTone)).toEqual(['medium', 'medium']);
     expect([5, 6].map(getEstimateTone)).toEqual(['high', 'high']);
     expect([7, 13].map(getEstimateTone)).toEqual(['critical', 'critical']);
+  });
+
+  it.each([
+    ['Not started', false, false],
+    ['In progress', true, false],
+    ['Done', false, true],
+  ] as const)('maps the %s board column to task frontmatter', (state, inProgress, done) => {
+    const frontmatter: Record<string, unknown> = {
+      'in progress': !inProgress,
+      'is done': !done,
+      estimate: 3,
+    };
+
+    applyTaskBoardState(frontmatter, state);
+
+    expect(frontmatter).toEqual({
+      'in progress': inProgress,
+      'is done': done,
+      estimate: 3,
+    });
   });
 });

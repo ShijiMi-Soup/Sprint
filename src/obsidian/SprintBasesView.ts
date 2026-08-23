@@ -1,10 +1,21 @@
 import type { BasesAllOptions, BasesViewRegistration, QueryController, TFile } from 'obsidian';
-import { BasesView } from 'obsidian';
+import { BasesView, Notice } from 'obsidian';
 
 import type { SprintSettings } from '../domain/types';
 
 export const SPRINT_BASES_VIEW_TYPE = 'sprint-agent-sprint-board';
 export const SPRINT_VELOCITY_VIEW_TYPE = 'sprint-agent-velocity-chart';
+const TASK_DRAG_TYPE = 'application/x-sprint-task-path';
+
+export type TaskBoardState = 'Not started' | 'In progress' | 'Done';
+
+export function applyTaskBoardState(
+  frontmatter: Record<string, unknown>,
+  state: TaskBoardState,
+): void {
+  frontmatter['in progress'] = state === 'In progress';
+  frontmatter['is done'] = state === 'Done';
+}
 
 export function getSprintBasesOptions(
   settings: SprintSettings,
@@ -51,7 +62,7 @@ function isDone(frontmatter: Record<string, unknown> | undefined): boolean {
   return frontmatter?.['is done'] === true;
 }
 
-function taskState(frontmatter: Record<string, unknown> | undefined): string {
+function taskState(frontmatter: Record<string, unknown> | undefined): TaskBoardState {
   if (isDone(frontmatter)) return 'Done';
   if (frontmatter?.['in progress'] === true) return 'In progress';
   return 'Not started';
@@ -73,6 +84,8 @@ class SprintBasesView extends BasesView {
   readonly type = SPRINT_BASES_VIEW_TYPE;
   private readonly containerEl: HTMLElement;
   private readonly embedded: boolean;
+  private draggedTaskPath: string | null = null;
+  private draggedTaskEl: HTMLElement | null = null;
 
   constructor(
     controller: QueryController,
@@ -145,9 +158,9 @@ class SprintBasesView extends BasesView {
 
   private renderKanban(content: HTMLElement, showCompleted: boolean): void {
     const columns = [
-      { key: 'Not started', entries: [] as typeof this.data.groupedData[number]['entries'] },
-      { key: 'In progress', entries: [] as typeof this.data.groupedData[number]['entries'] },
-      { key: 'Done', entries: [] as typeof this.data.groupedData[number]['entries'] },
+      { key: 'Not started' as const, entries: [] as typeof this.data.groupedData[number]['entries'] },
+      { key: 'In progress' as const, entries: [] as typeof this.data.groupedData[number]['entries'] },
+      { key: 'Done' as const, entries: [] as typeof this.data.groupedData[number]['entries'] },
     ];
     const seen = new Set<string>();
     for (const group of this.data.groupedData) {
@@ -161,9 +174,13 @@ class SprintBasesView extends BasesView {
     }
 
     for (const column of columns) {
-      const section = content.createDiv({ cls: 'sprint-bases-group' });
+      const section = content.createDiv({
+        cls: 'sprint-bases-group',
+        attr: { 'data-task-state': column.key },
+      });
       section.createEl('h4', { text: column.key });
       const entries = section.createDiv({ cls: 'sprint-bases-entries' });
+      this.registerDropTarget(section, entries, column.key);
       if (column.entries.length === 0) {
         entries.createDiv({ cls: 'sprint-bases-empty', text: 'No tasks' });
       }
@@ -171,7 +188,12 @@ class SprintBasesView extends BasesView {
         const frontmatter = this.app.metadataCache.getFileCache(entry.file)?.frontmatter;
         const link = entries.createEl('button', {
           cls: 'sprint-bases-entry',
-          attr: { type: 'button' },
+          attr: {
+            type: 'button',
+            draggable: 'true',
+            'data-task-path': entry.file.path,
+            'aria-label': `${entry.file.basename}. Drag to change task state.`,
+          },
         });
         link.createSpan({ cls: 'sprint-bases-entry-title', text: entry.file.basename });
         const points = estimate(frontmatter);
@@ -182,11 +204,126 @@ class SprintBasesView extends BasesView {
             text: `${points} pt`,
           });
         }
-        link.addEventListener('click', () => {
+        let dragged = false;
+        link.addEventListener('dragstart', (event) => {
+          dragged = true;
+          this.draggedTaskPath = entry.file.path;
+          this.draggedTaskEl = link;
+          link.classList.add('is-dragging');
+          if (event.dataTransfer) {
+            event.dataTransfer.effectAllowed = 'move';
+            event.dataTransfer.setData(TASK_DRAG_TYPE, entry.file.path);
+            event.dataTransfer.setData('text/plain', entry.file.path);
+          }
+        });
+        link.addEventListener('dragend', () => {
+          this.clearDragState();
+          link.ownerDocument.defaultView?.setTimeout(() => {
+            dragged = false;
+          }, 0);
+        });
+        link.addEventListener('click', (event) => {
+          if (dragged) {
+            event.preventDefault();
+            return;
+          }
           void this.app.workspace.openLinkText(entry.file.path, '', false);
         });
       }
     }
+  }
+
+  private registerDropTarget(
+    section: HTMLElement,
+    entries: HTMLElement,
+    state: TaskBoardState,
+  ): void {
+    section.addEventListener('dragover', (event) => {
+      if (!this.draggedTaskPath) return;
+      event.preventDefault();
+      if (event.dataTransfer) event.dataTransfer.dropEffect = 'move';
+      section.classList.add('is-drop-target');
+    });
+    section.addEventListener('dragleave', (event) => {
+      const nextTarget = event.relatedTarget;
+      const NodeConstructor = section.ownerDocument.defaultView?.Node;
+      if (!NodeConstructor || !(nextTarget instanceof NodeConstructor) || !section.contains(nextTarget)) {
+        section.classList.remove('is-drop-target');
+      }
+    });
+    section.addEventListener('drop', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      section.classList.remove('is-drop-target');
+      const path = event.dataTransfer?.getData(TASK_DRAG_TYPE) || this.draggedTaskPath;
+      if (!path) return;
+      void this.moveTask(path, state, entries);
+    });
+  }
+
+  private async moveTask(
+    path: string,
+    state: TaskBoardState,
+    target: HTMLElement,
+  ): Promise<void> {
+    const file = this.app.vault.getFileByPath(path);
+    if (!file) {
+      this.clearDragState();
+      new Notice(`Unable to move task: ${path} was not found.`);
+      return;
+    }
+
+    const currentFrontmatter = this.app.metadataCache.getFileCache(file)?.frontmatter;
+    if (taskState(currentFrontmatter) === state) {
+      this.clearDragState();
+      return;
+    }
+
+    const card = this.draggedTaskEl;
+    const originalParent = card?.parentElement ?? null;
+    const originalNextSibling = card?.nextSibling ?? null;
+    if (card) {
+      target.querySelector('.sprint-bases-empty')?.remove();
+      target.append(card);
+      card.classList.remove('is-dragging');
+      card.classList.add('is-updating');
+      card.setAttribute('aria-busy', 'true');
+      this.ensureColumnEmptyState(originalParent);
+    }
+
+    try {
+      await this.app.fileManager.processFrontMatter(file, (frontmatter) => {
+        applyTaskBoardState(frontmatter as Record<string, unknown>, state);
+      });
+    } catch (error) {
+      if (card && originalParent) {
+        originalParent.querySelector('.sprint-bases-empty')?.remove();
+        originalParent.insertBefore(card, originalNextSibling);
+        this.ensureColumnEmptyState(target);
+      }
+      const message = error instanceof Error ? error.message : String(error);
+      new Notice(`Unable to move task: ${message}`);
+    } finally {
+      card?.classList.remove('is-updating');
+      card?.removeAttribute('aria-busy');
+      this.clearDragState();
+    }
+  }
+
+  private ensureColumnEmptyState(entries: HTMLElement | null): void {
+    if (!entries || entries.querySelector('.sprint-bases-entry')) return;
+    if (!entries.querySelector('.sprint-bases-empty')) {
+      entries.createDiv({ cls: 'sprint-bases-empty', text: 'No tasks' });
+    }
+  }
+
+  private clearDragState(): void {
+    this.draggedTaskEl?.classList.remove('is-dragging');
+    this.containerEl.querySelectorAll('.is-drop-target').forEach((element) => {
+      element.classList.remove('is-drop-target');
+    });
+    this.draggedTaskPath = null;
+    this.draggedTaskEl = null;
   }
 }
 

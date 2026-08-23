@@ -32,6 +32,12 @@
   border: 1px solid var(--background-modifier-border);
   border-radius: 8px;
   padding: var(--size-4-2);
+  transition: background-color 120ms ease, border-color 120ms ease;
+}
+
+.sprint-bases-kanban .sprint-bases-group.is-drop-target {
+  background: color-mix(in srgb, var(--interactive-accent) 8%, var(--background-secondary));
+  border-color: color-mix(in srgb, var(--interactive-accent) 55%, var(--background-modifier-border));
 }
 
 .sprint-bases-group {
@@ -42,6 +48,7 @@
   display: grid;
   gap: var(--size-4-2);
   margin-top: var(--size-4-2);
+  min-height: 44px;
 }
 
 .sprint-bases-view button.sprint-bases-entry {
@@ -63,6 +70,23 @@
   padding: var(--size-4-2);
   text-align: left;
   width: 100%;
+}
+
+.sprint-bases-kanban button.sprint-bases-entry {
+  cursor: grab;
+}
+
+.sprint-bases-kanban button.sprint-bases-entry:active {
+  cursor: grabbing;
+}
+
+.sprint-bases-view button.sprint-bases-entry.is-dragging {
+  opacity: 0.45;
+}
+
+.sprint-bases-view button.sprint-bases-entry.is-updating {
+  opacity: 0.7;
+  pointer-events: none;
 }
 
 .sprint-bases-view button.sprint-bases-entry:hover {

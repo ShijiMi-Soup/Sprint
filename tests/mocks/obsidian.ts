@@ -13,7 +13,9 @@ export class BasesView {
 export class Plugin {}
 export class PluginSettingTab {}
 export class Setting {}
-export class Notice {}
+export class Notice {
+  constructor(readonly message?: string) {}
+}
 export class Modal {
   titleEl = { setText: jest.fn() };
   contentEl = { createEl: jest.fn(), empty: jest.fn() };

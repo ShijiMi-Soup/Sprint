@@ -10,6 +10,7 @@ Commit: `cde1ede` (`Add Agile PM workspace generation and custom Bases views`)
 - Generated Tasks, Sprints, and Projects Bases with sample tutorial data and property types.
 - An `Agile PM.md` dashboard showing the current sprint, current tasks, Sprint board, Velocity, and projects.
 - A three-column Sprint board for Not started, In progress, and Done tasks.
+- Drag-and-drop task state changes between all three Sprint board columns.
 - A native Velocity chart view without requiring a third-party Obsidian chart plugin.
 - Estimate badges inside task cards with warning colors: 1-2 points green, 3-4 yellow, 5-6 orange, and 7 or more red.
 - Profile-local `AGENTS.md`, `CLAUDE.md`, and skill files for external AI tools.
@@ -49,4 +50,3 @@ Temporary instrumentation and compatibility code are tracked in `docs/TEMPORARY_
 - Embedded custom Bases lifecycle console logging.
 - The Sprint generation diagnostic command.
 - The standalone Sprint Board Base compatibility migration.
-
