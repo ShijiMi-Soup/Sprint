@@ -1,5 +1,10 @@
 # Development Log
 
+## 2026-08-24 - Velocity visual refinement
+
+- Retained bars as the primary Velocity encoding because sprint output is a discrete per-sprint measurement.
+- Removed the gray track and border behind each Velocity bar while preserving labels and zero-point sprints.
+
 ## 2026-08-23 - Agile PM workspace and custom Bases views
 
 Related commits:
