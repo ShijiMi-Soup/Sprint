@@ -204,20 +204,30 @@
   align-items: center;
   display: grid;
   gap: var(--size-2-3);
-  grid-template-rows: auto 1fr auto;
+  grid-template-rows: 1fr auto;
   min-width: 0;
 }
 
 .sprint-velocity-value {
-  color: var(--text-muted);
+  bottom: max(10px, calc(var(--sprint-velocity-height) / 2));
+  color: var(--text-on-accent);
   font-size: var(--font-ui-small);
+  font-weight: var(--font-semibold);
+  left: 50%;
+  position: absolute;
+  transform: translate(-50%, 50%);
+  z-index: 1;
+}
+
+.sprint-velocity-value.is-zero {
+  color: var(--text-muted);
 }
 
 .sprint-velocity-bar-wrap {
   align-items: end;
   display: flex;
   height: 160px;
-  overflow: hidden;
+  position: relative;
   width: 100%;
 }
 

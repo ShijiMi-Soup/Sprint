@@ -446,13 +446,18 @@ class SprintVelocityView extends BasesView {
     const chart = this.containerEl.createDiv({ cls: 'sprint-velocity-chart' });
     for (const point of points) {
       const column = chart.createDiv({ cls: 'sprint-velocity-column' });
-      column.createDiv({ cls: 'sprint-velocity-value', text: String(point.value) });
-      const barWrap = column.createDiv({ cls: 'sprint-velocity-bar-wrap' });
+      const height = point.value === 0 ? 0 : Math.max(4, Math.round((point.value / max) * 100));
+      const barWrap = column.createDiv({
+        cls: 'sprint-velocity-bar-wrap',
+        attr: { style: `--sprint-velocity-height: ${height}%` },
+      });
+      barWrap.createDiv({
+        cls: `sprint-velocity-value${point.value === 0 ? ' is-zero' : ''}`,
+        text: String(point.value),
+      });
       barWrap.createDiv({
         cls: 'sprint-velocity-bar',
-        attr: {
-          style: `height: ${point.value === 0 ? 0 : Math.max(4, Math.round((point.value / max) * 100))}%`,
-        },
+        attr: { style: 'height: var(--sprint-velocity-height)' },
       });
       column.createDiv({ cls: 'sprint-velocity-label', text: point.label });
     }

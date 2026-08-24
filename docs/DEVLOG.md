@@ -4,6 +4,7 @@
 
 - Retained bars as the primary Velocity encoding because sprint output is a discrete per-sprint measurement.
 - Removed the gray track and border behind each Velocity bar while preserving labels and zero-point sprints.
+- Moved Velocity values into the center of each bar, with zero values retained at the baseline.
 
 ## 2026-08-23 - Agile PM workspace and custom Bases views
 
