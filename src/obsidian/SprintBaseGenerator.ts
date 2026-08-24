@@ -29,6 +29,7 @@ interface SampleNote {
   path: string;
   content: string;
   sprintName?: string;
+  removeDefaultOwner?: boolean;
 }
 
 type SampleVersion = 'legacy' | 'current';
@@ -298,6 +299,41 @@ function standaloneSprintBoardContent(settings: SprintSettings, profile: SprintP
   );
 }
 
+function projectsBaseContent(
+  settings: SprintSettings,
+  profile: SprintProfile,
+  includeOwner = false,
+): string {
+  const resolved = resolveSprintProfile(settings, profile);
+  const root = normalizeFolder(resolved.rootFolder);
+  return baseConfig(
+    `${root}/Projects`,
+    {
+      'file.name': 'Project',
+      'formula.project_state': 'State',
+      'note.in progress': 'In progress',
+      'note.is done': 'Done',
+      ...(includeOwner ? { 'note.owner': 'Owner' } : {}),
+      'note.priority': 'Priority',
+      'note.due': 'Due',
+    },
+    [
+      ...tableView('Projects', [
+        'file.name',
+        'formula.project_state',
+        'note.in progress',
+        'note.is done',
+        ...(includeOwner ? ['note.owner'] : []),
+        'note.priority',
+        'note.due',
+      ]),
+    ],
+    {
+      project_state: 'if(note["is done"], "Done", if(note["in progress"], "In progress", "Not started"))',
+    },
+  );
+}
+
 function definitionsForProfile(settings: SprintSettings, profile: SprintProfile): BaseDefinition[] {
   const resolved = resolveSprintProfile(settings, profile);
   const root = normalizeFolder(resolved.rootFolder);
@@ -384,32 +420,7 @@ function definitionsForProfile(settings: SprintSettings, profile: SprintProfile)
     {
       path: projectsBase,
       folder: `${root}/Projects`,
-      content: baseConfig(
-        `${root}/Projects`,
-        {
-          'file.name': 'Project',
-          'formula.project_state': 'State',
-          'note.in progress': 'In progress',
-          'note.is done': 'Done',
-          'note.owner': 'Owner',
-          'note.priority': 'Priority',
-          'note.due': 'Due',
-        },
-        [
-          ...tableView('Projects', [
-            'file.name',
-            'formula.project_state',
-            'note.in progress',
-            'note.is done',
-            'note.owner',
-            'note.priority',
-            'note.due',
-          ]),
-        ],
-        {
-          project_state: 'if(note["is done"], "Done", if(note["in progress"], "In progress", "Not started"))',
-        },
-      ),
+      content: projectsBaseContent(settings, profile),
     },
   ];
 }
@@ -427,6 +438,9 @@ export class SprintBaseGenerator {
     for (const profile of settings.profiles.filter((candidate) => candidate.enabled)) {
       await this.withContext(`Migrate Tasks Base for ${profile.name || profile.id}`, () => (
         this.migrateTasksBase(settings, profile)
+      ));
+      await this.withContext(`Migrate Projects Base for ${profile.name || profile.id}`, () => (
+        this.migrateProjectsBase(settings, profile)
       ));
       await this.withContext(`Remove obsolete Sprint Board Base for ${profile.name || profile.id}`, () => (
         this.removeObsoleteSprintBoardBase(settings, profile)
@@ -515,6 +529,17 @@ export class SprintBaseGenerator {
     }
   }
 
+  private async migrateProjectsBase(settings: SprintSettings, profile: SprintProfile): Promise<void> {
+    const resolved = resolveSprintProfile(settings, profile);
+    const path = basePath(resolved.projectsBasePath);
+    const existing = this.app.vault.getFileByPath(path);
+    if (!existing) return;
+    const current = await this.app.vault.read(existing);
+    if (current === projectsBaseContent(settings, profile, true)) {
+      await this.app.vault.modify(existing, projectsBaseContent(settings, profile));
+    }
+  }
+
   private async ensureFolder(folder: string): Promise<void> {
     let current = '';
     for (const segment of normalizePath(folder).split('/').filter(Boolean)) {
@@ -581,7 +606,6 @@ export class SprintBaseGenerator {
       project: 'multitext',
       sprint: 'multitext',
       priority: 'number',
-      owner: 'text',
       due: 'date',
       'due date': 'date',
     });
@@ -639,8 +663,9 @@ export class SprintBaseGenerator {
         const current = await this.app.vault.read(existing);
         if (previous && previous.content !== note.content && current === previous.content) {
           await this.app.vault.modify(existing, note.content);
-        } else if (note.sprintName) {
-          await this.assignSampleSprintIfMissing(existing, note.sprintName);
+        } else {
+          if (note.sprintName) await this.assignSampleSprintIfMissing(existing, note.sprintName);
+          if (note.removeDefaultOwner) await this.removeSampleDefaultOwner(existing);
         }
         continue;
       }
@@ -669,7 +694,7 @@ export class SprintBaseGenerator {
             'priority: 1',
             'in progress: true',
             'is done: false',
-            'owner: "You"',
+            ...(version === 'legacy' ? ['owner: "You"'] : []),
           ],
           [
             '# Welcome to Agile PM',
@@ -679,6 +704,7 @@ export class SprintBaseGenerator {
             'Try opening the Projects Base, then replace this tutorial project after you create your first real project.',
           ].join('\n'),
         ),
+        removeDefaultOwner: true,
       },
       {
         path: `${root}/Projects/Sprint system setup.md`,
@@ -687,7 +713,7 @@ export class SprintBaseGenerator {
             'priority: 2',
             'in progress: false',
             'is done: false',
-            'owner: "You"',
+            ...(version === 'legacy' ? ['owner: "You"'] : []),
           ],
           [
             '# Sprint system setup',
@@ -695,6 +721,7 @@ export class SprintBaseGenerator {
             'This sample project groups the tutorial tasks that explain how to plan, execute, and review sprint work.',
           ].join('\n'),
         ),
+        removeDefaultOwner: true,
       },
       {
         path: `${root}/Tasks/Review the Agile PM dashboard.md`,
@@ -846,6 +873,14 @@ export class SprintBaseGenerator {
     if (!frontmatter || frontmatter.sprint !== undefined) return;
     await this.app.fileManager.processFrontMatter(file, (properties) => {
       if (properties.sprint === undefined) properties.sprint = [`[[${sprintName}]]`];
+    });
+  }
+
+  private async removeSampleDefaultOwner(file: TFile): Promise<void> {
+    const frontmatter = this.app.metadataCache.getFileCache(file)?.frontmatter;
+    if (frontmatter?.owner !== 'You') return;
+    await this.app.fileManager.processFrontMatter(file, (properties) => {
+      if (properties.owner === 'You') delete properties.owner;
     });
   }
 

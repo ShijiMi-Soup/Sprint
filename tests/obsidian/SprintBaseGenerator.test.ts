@@ -66,6 +66,7 @@ describe('SprintBaseGenerator', () => {
     expect(written.get('Agile PM/Bases/Sprints.base')).toContain('type: sprint-agent-velocity-chart');
     expect(written.get('Agile PM/Bases/Sprints.base')).toContain('name: "Velocity"');
     expect(written.get('Agile PM/Bases/Projects.base')).not.toContain('note.status');
+    expect(written.get('Agile PM/Bases/Projects.base')).not.toContain('note.owner');
     expect(written.get('Agile PM/Agile PM.md')).toContain('## Velocity');
     expect(written.get('Agile PM/Agile PM.md')).toContain('---\n\n## Velocity');
     expect(written.get('Agile PM/Agile PM.md')).toContain('---\n\n## Projects');
@@ -82,6 +83,8 @@ describe('SprintBaseGenerator', () => {
     expect([...written.keys()].filter((path) => path.startsWith('Agile PM/Tasks/'))).toHaveLength(7);
     expect(written.get('Agile PM/Tasks/Plan work into the current sprint.md')).not.toContain('status:');
     expect(written.get('Agile PM/Projects/Welcome to Agile PM.md')).not.toContain('status:');
+    expect(written.get('Agile PM/Projects/Welcome to Agile PM.md')).not.toContain('owner:');
+    expect(written.get('Agile PM/Projects/Sprint system setup.md')).not.toContain('owner:');
     expect(app.vault.create).not.toHaveBeenCalledWith(
       'Agile PM/Bases/Tasks.base',
       expect.any(String),
@@ -93,6 +96,10 @@ describe('SprintBaseGenerator', () => {
     expect(app.vault.adapter.write).toHaveBeenCalledWith(
       '.obsidian/types.json',
       expect.stringContaining('"in progress": "checkbox"'),
+    );
+    expect(app.vault.adapter.write).toHaveBeenCalledWith(
+      '.obsidian/types.json',
+      expect.not.stringContaining('"owner"'),
     );
   });
 
@@ -131,7 +138,7 @@ describe('SprintBaseGenerator', () => {
     expect(written.get('CLAUDE.md')).toContain('sprint-managed-start');
   });
 
-  it('migrates a generated Tasks Base so completed cards remain visible', async () => {
+  it('migrates generated task and project Base defaults', async () => {
     const existing = new Set<string>();
     const folders = new Set<string>();
     const written = new Map<string, string>();
@@ -171,11 +178,23 @@ describe('SprintBaseGenerator', () => {
     const generator = new SprintBaseGenerator(app as never);
     const settings = normalizeSprintSettings({ enabled: true, rootFolder: 'Agile PM' });
     const path = 'Agile PM/Bases/Tasks.base';
+    const projectsPath = 'Agile PM/Bases/Projects.base';
 
     await generator.generate(settings);
     const generated = written.get(path);
+    const generatedProjects = written.get(projectsPath);
     expect(generated).toBeDefined();
+    expect(generatedProjects).toBeDefined();
     written.set(path, generated!.replace('showCompleted: true', 'showCompleted: false'));
+    written.set(
+      projectsPath,
+      generatedProjects!
+        .replace(
+          '  note.priority:',
+          '  note.owner:\n    displayName: "Owner"\n  note.priority:',
+        )
+        .replace('      - note.priority', '      - note.owner\n      - note.priority'),
+    );
     modify.mockClear();
 
     await generator.generate(settings);
@@ -185,6 +204,11 @@ describe('SprintBaseGenerator', () => {
       expect.stringContaining('showCompleted: true'),
     );
     expect(written.get(path)).toContain('showCompleted: true');
+    expect(modify).toHaveBeenCalledWith(
+      expect.objectContaining({ path: projectsPath }),
+      expect.not.stringContaining('note.owner'),
+    );
+    expect(written.get(projectsPath)).not.toContain('note.owner');
   });
 
   it('assigns Sprint 1 to an edited sample task without replacing its properties', async () => {
