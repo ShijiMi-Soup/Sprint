@@ -1,5 +1,5 @@
 import type { App, TFile } from 'obsidian';
-import { normalizePath } from 'obsidian';
+import { normalizePath, parseYaml, stringifyYaml } from 'obsidian';
 
 import { resolveSprintProfile } from '../domain/SprintSettings';
 import type { SprintProfile, SprintSettings } from '../domain/types';
@@ -17,14 +17,6 @@ interface BaseDefinition {
   content: string;
 }
 
-interface SprintSummary {
-  name: string;
-  path: string;
-  startDate: string | null;
-  endDate: string | null;
-  status: string | null;
-}
-
 interface SampleNote {
   path: string;
   content: string;
@@ -38,6 +30,16 @@ type SprintTaskScope = 'current' | 'next';
 const MANAGED_START = '<!-- sprint-managed-start -->';
 const MANAGED_END = '<!-- sprint-managed-end -->';
 const GENERATED_FILE_MARKER = '<!-- sprint-generated-file -->';
+export const SPRINT_SUMMARY_FILENAME = 'Sprint Summary.md';
+export type SprintSummaryWriteAction = 'create' | 'unchanged' | 'preserve';
+
+export function getSprintSummaryWriteAction(
+  existing: string | null,
+  generated: string,
+): SprintSummaryWriteAction {
+  if (existing === null) return 'create';
+  return existing === generated ? 'unchanged' : 'preserve';
+}
 
 function isAlreadyExistsError(error: unknown): boolean {
   return error instanceof Error && /already exists/i.test(error.message);
@@ -119,20 +121,26 @@ function sprintInstructions(settings: SprintSettings, profiles = settings.profil
     '- Task notes live in each profile\'s `Tasks` folder unless the vault documents a different convention.',
     '- Sprint notes live in each profile\'s `Sprints` folder.',
     '- Project notes live in each profile\'s `Projects` folder.',
+    '- `Tasks.base`, `Sprints.base`, and `Projects.base` live directly in each profile root by default.',
     '- Existing notes and Base files define the vault\'s actual property names and conventions. Inspect them before changing files.',
     '',
-    '## Profiles',
+    '## Workspace',
     '',
     ...profileLines,
     '',
     '## Standard Metadata',
     '',
-    'Task notes commonly use `estimate`, `in progress`, `is done`, `project`, and `sprint` properties. Sprint notes use `sprint number`, `start date`, `end date`, `sprint status`, `review`, and `retrospective`.',
+    'Task notes use numeric `estimate`, boolean `in progress`, boolean `is done`, boolean `archived`, and link-list `project` and `sprint` properties. Project notes use boolean `in progress`, boolean `is done`, and boolean `hidden`. They may also use `priority`, `due`, or other vault-specific properties. Sprint notes use `sprint number`, `start date`, `end date`, `sprint status`, `review`, and `retrospective`.',
     '',
     '## Operating Rules',
     '',
-    '- Identify the relevant profile before editing tasks or projects.',
+    '- Use the configured Sprint workspace before editing tasks or projects.',
     '- Identify the current sprint from `sprint status: current`; do not infer it from a filename alone.',
+    '- Represent task state consistently: Not started means both state booleans are false; In progress means `in progress` is true and `is done` is false; Done means `is done` is true and `in progress` is false.',
+    '- Set `archived: true` only when the user wants a task removed from sprint boards while retaining it in the Tasks view and vault history.',
+    '- Set a project\'s `hidden` property only to control its visibility on sprint boards; do not confuse hidden with project completion.',
+    '- When creating a task, place it in the profile `Tasks` folder and link it to an existing project and sprint when those are known.',
+    '- Store `project` and `sprint` as lists of Obsidian links, matching the conventions in existing generated task notes.',
     '- For broad or destructive changes, summarize the proposed file changes and ask for confirmation first.',
     '- Assign tasks to existing generated sprint notes by updating the `sprint` property.',
     '- Mark tasks complete only when the user says the work is complete or available evidence clearly establishes completion.',
@@ -141,7 +149,12 @@ function sprintInstructions(settings: SprintSettings, profiles = settings.profil
   ].join('\n');
 }
 
-function skillInstructions(settings: SprintSettings, profiles = settings.profiles): string {
+export function sprintSkillContent(
+  settings: SprintSettings,
+  profiles = settings.profiles,
+  customInstructions = settings.skillCustomInstructions['sprint-vault'] ?? '',
+): string {
+  const custom = customInstructions.trim();
   return [
     '---',
     'name: sprint-vault',
@@ -151,6 +164,12 @@ function skillInstructions(settings: SprintSettings, profiles = settings.profile
     GENERATED_FILE_MARKER,
     '',
     sprintInstructions(settings, profiles),
+    ...(custom ? [
+      '## Vault-specific instructions',
+      '',
+      custom,
+      '',
+    ] : []),
   ].join('\n');
 }
 
@@ -176,6 +195,7 @@ function sprintOverviewView(profileId: string): string[] {
     '      property: sprint status',
     '      direction: ASC',
     `    sprintProfile: ${yamlString(profileId)}`,
+    '    itemType: "sprint"',
     '    layout: board',
     '    showCompleted: true',
   ];
@@ -191,28 +211,23 @@ function sprintView(
   return [
     `  - type: ${SPRINT_BASES_VIEW_TYPE}`,
     `    name: ${yamlString(name)}`,
-    ...(sprintScope ? [
-      '    filters:',
-      '      and:',
-      `        - formula.is_${sprintScope}_sprint`,
-    ] : []),
+    '    filters:',
+    '      and:',
+    '        - note.archived != true',
+    ...(sprintScope ? [`        - formula.is_${sprintScope}_sprint`] : []),
     ...(layout === 'kanban' ? [
       '    groupBy:',
       '      property: formula.task_state',
       '      direction: ASC',
     ] : []),
     `    sprintProfile: ${yamlString(profileId)}`,
+    ...(sprintScope ? [`    sprintScope: ${yamlString(sprintScope)}`] : []),
     `    layout: ${yamlString(layout)}`,
     `    showCompleted: ${showCompleted}`,
+    '    cardProperty1: note.estimate',
+    ...(!sprintScope ? ['    cardProperty2: note.sprint'] : []),
+    '    newTaskProperty1: note.estimate',
   ];
-}
-
-function linkTo(path: string, label: string): string {
-  return `[[${path.replace(/\.md$/, '')}|${label}]]`;
-}
-
-function readDate(value: unknown): string | null {
-  return typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : null;
 }
 
 function managedContent(content: string): string {
@@ -238,16 +253,13 @@ function taskBaseProperties(): Record<string, string> {
     'note.estimate': 'Estimate',
     'note.in progress': 'In progress',
     'note.is done': 'Done',
+    'note.archived': 'Archived',
   };
 }
 
 function tasksBaseContent(
   settings: SprintSettings,
   profile: SprintProfile,
-  includeSprintBoard: boolean,
-  showCompleted = true,
-  includeCurrentSprintView = includeSprintBoard,
-  includeNextSprintView = includeCurrentSprintView,
 ): string {
   const resolved = resolveSprintProfile(settings, profile);
   const root = normalizeFolder(resolved.rootFolder);
@@ -255,6 +267,7 @@ function tasksBaseContent(
     `${root}/Tasks`,
     taskBaseProperties(),
     [
+      ...sprintView(resolved.id, 'Sprint board', 'kanban', true),
       ...tableView('Tasks', [
         'file.name',
         'formula.task_state',
@@ -263,40 +276,125 @@ function tasksBaseContent(
         'note.estimate',
         'note.in progress',
         'note.is done',
+        'note.archived',
       ]),
-      ...(includeSprintBoard
-        ? sprintView(resolved.id, 'Sprint board', 'kanban', showCompleted)
-        : []),
-      ...(includeCurrentSprintView
-        ? sprintView(resolved.id, 'Current sprint', 'kanban', true, 'current')
-        : []),
-      ...(includeNextSprintView
-        ? sprintView(resolved.id, 'Next sprint', 'kanban', true, 'next')
-        : []),
+      ...sprintView(resolved.id, 'Current sprint', 'kanban', true, 'current'),
+      ...sprintView(resolved.id, 'Next sprint', 'kanban', true, 'next'),
     ],
     {
       task_state: 'if(note["is done"], "Done", if(note["in progress"], "In progress", "Not started"))',
-      ...(includeCurrentSprintView ? {
-        is_current_sprint: 'note.sprint.filter(value.asFile().properties["sprint status"] == "current").length > 0',
-      } : {}),
-      ...(includeNextSprintView ? {
-        is_next_sprint: 'note.sprint.filter(value.asFile().properties["sprint status"] == "next").length > 0',
-      } : {}),
+      is_current_sprint: 'note.sprint.filter(value.asFile().properties["sprint status"] == "current").length > 0',
+      is_next_sprint: 'note.sprint.filter(value.asFile().properties["sprint status"] == "next").length > 0',
     },
   );
 }
 
-function standaloneSprintBoardContent(settings: SprintSettings, profile: SprintProfile): string {
-  const resolved = resolveSprintProfile(settings, profile);
-  const root = normalizeFolder(resolved.rootFolder);
-  return baseConfig(
-    `${root}/Tasks`,
-    taskBaseProperties(),
-    sprintView(resolved.id, 'Sprint board', 'kanban', false),
-    {
-      task_state: 'if(note["is done"], "Done", if(note["in progress"], "In progress", "Not started"))',
-    },
-  );
+type BaseRecord = Record<string, unknown>;
+
+function asRecord(value: unknown): BaseRecord | null {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? value as BaseRecord
+    : null;
+}
+
+function appendFilter(view: BaseRecord, filter: string): boolean {
+  const filters = asRecord(view.filters);
+  if (!filters) {
+    view.filters = { and: [filter] };
+    return true;
+  }
+  const and = filters.and;
+  if (Array.isArray(and)) {
+    if (and.includes(filter)) return false;
+    and.unshift(filter);
+    return true;
+  }
+  view.filters = { and: [filter, filters] };
+  return true;
+}
+
+function appendOrder(view: BaseRecord, property: string): boolean {
+  if (!Array.isArray(view.order) || view.order.includes(property)) return false;
+  view.order.push(property);
+  return true;
+}
+
+function migrateBaseContent(
+  content: string,
+  mutate: (base: BaseRecord) => boolean,
+): string {
+  try {
+    const base = asRecord(parseYaml(content));
+    if (!base || !mutate(base)) return content;
+    return stringifyYaml(base);
+  } catch {
+    return content;
+  }
+}
+
+export function migrateBaseFolderContent(content: string, folder: string): string {
+  return migrateBaseContent(content, (base) => {
+    const filters = asRecord(base.filters);
+    if (!filters || !Array.isArray(filters.and)) return false;
+    const index = filters.and.findIndex((filter) => (
+      typeof filter === 'string' && filter.startsWith('file.inFolder(')
+    ));
+    if (index === -1) return false;
+    const expected = `file.inFolder(${JSON.stringify(folder)})`;
+    if (filters.and[index] === expected) return false;
+    filters.and[index] = expected;
+    return true;
+  });
+}
+
+export function migrateTasksBaseContent(content: string, profileId: string): string {
+  return migrateBaseContent(content, (base) => {
+    let changed = false;
+    const properties = asRecord(base.properties);
+    if (properties && !properties['note.archived']) {
+      properties['note.archived'] = { displayName: 'Archived' };
+      changed = true;
+    }
+    if (!Array.isArray(base.views)) return changed;
+    for (const candidate of base.views) {
+      const view = asRecord(candidate);
+      if (!view) continue;
+      if (view.type === 'table' && view.name === 'Tasks') {
+        changed = appendOrder(view, 'note.archived') || changed;
+        continue;
+      }
+      if (view.type !== SPRINT_BASES_VIEW_TYPE || view.sprintProfile !== profileId) continue;
+      changed = appendFilter(view, 'note.archived != true') || changed;
+      if (view.cardProperty1 === undefined) {
+        view.cardProperty1 = 'note.estimate';
+        changed = true;
+      }
+      if (view.name === 'Sprint board' && view.cardProperty2 === undefined) {
+        view.cardProperty2 = 'note.sprint';
+        changed = true;
+      }
+    }
+    return changed;
+  });
+}
+
+export function migrateProjectsBaseContent(content: string): string {
+  return migrateBaseContent(content, (base) => {
+    let changed = false;
+    const properties = asRecord(base.properties);
+    if (properties && !properties['note.hidden']) {
+      properties['note.hidden'] = { displayName: 'Hidden' };
+      changed = true;
+    }
+    if (!Array.isArray(base.views)) return changed;
+    for (const candidate of base.views) {
+      const view = asRecord(candidate);
+      if (view?.type === 'table' && view.name === 'Projects') {
+        changed = appendOrder(view, 'note.hidden') || changed;
+      }
+    }
+    return changed;
+  });
 }
 
 function projectsBaseContent(
@@ -313,6 +411,7 @@ function projectsBaseContent(
       'formula.project_state': 'State',
       'note.in progress': 'In progress',
       'note.is done': 'Done',
+      'note.hidden': 'Hidden',
       ...(includeOwner ? { 'note.owner': 'Owner' } : {}),
       'note.priority': 'Priority',
       'note.due': 'Due',
@@ -323,6 +422,7 @@ function projectsBaseContent(
         'formula.project_state',
         'note.in progress',
         'note.is done',
+        'note.hidden',
         ...(includeOwner ? ['note.owner'] : []),
         'note.priority',
         'note.due',
@@ -337,17 +437,17 @@ function projectsBaseContent(
 function definitionsForProfile(settings: SprintSettings, profile: SprintProfile): BaseDefinition[] {
   const resolved = resolveSprintProfile(settings, profile);
   const root = normalizeFolder(resolved.rootFolder);
-  if (!root) throw new Error(`Set a project folder for ${resolved.name || 'this sprint profile'}.`);
+  if (!root) throw new Error(`Set a Sprint folder for ${resolved.name || 'this workspace'}.`);
 
-  const tasksBase = basePath(resolved.tasksBasePath || `${root}/Bases/Tasks.base`);
-  const sprintsBase = basePath(resolved.sprintsBasePath || `${root}/Bases/Sprints.base`);
-  const projectsBase = basePath(resolved.projectsBasePath || `${root}/Bases/Projects.base`);
+  const tasksBase = basePath(resolved.tasksBasePath || `${root}/Tasks.base`);
+  const sprintsBase = basePath(resolved.sprintsBasePath || `${root}/Sprints.base`);
+  const projectsBase = basePath(resolved.projectsBasePath || `${root}/Projects.base`);
 
   return [
     {
       path: tasksBase,
       folder: `${root}/Tasks`,
-      content: tasksBaseContent(settings, profile, true),
+      content: tasksBaseContent(settings, profile),
     },
     {
       path: sprintsBase,
@@ -436,16 +536,22 @@ export class SprintBaseGenerator {
     };
 
     for (const profile of settings.profiles.filter((candidate) => candidate.enabled)) {
+      const definitions = definitionsForProfile(settings, profile);
+      for (const definition of definitions) {
+        await this.withContext(`Migrate Base folder for ${definition.path}`, () => (
+          this.migrateExistingBase(
+            definition.path,
+            (content) => migrateBaseFolderContent(content, definition.folder),
+          )
+        ));
+      }
       await this.withContext(`Migrate Tasks Base for ${profile.name || profile.id}`, () => (
         this.migrateTasksBase(settings, profile)
       ));
       await this.withContext(`Migrate Projects Base for ${profile.name || profile.id}`, () => (
         this.migrateProjectsBase(settings, profile)
       ));
-      await this.withContext(`Remove obsolete Sprint Board Base for ${profile.name || profile.id}`, () => (
-        this.removeObsoleteSprintBoardBase(settings, profile)
-      ));
-      for (const definition of definitionsForProfile(settings, profile)) {
+      for (const definition of definitions) {
         await this.withContext(`Create Base ${definition.path}`, async () => {
           await this.ensureFolder(definition.folder);
           await this.ensureFolder(baseFolder(definition.path));
@@ -458,9 +564,11 @@ export class SprintBaseGenerator {
           else result.skipped += 1;
         });
       }
-      await this.withContext(`Create samples for ${profile.name || profile.id}`, () => (
-        this.writeSampleNotes(settings, profile)
-      ));
+      if (profile.samplesInitialized !== true) {
+        await this.withContext(`Create samples for ${profile.name || profile.id}`, () => (
+          this.writeSampleNotes(settings, profile)
+        ));
+      }
       await this.withContext(`Create dashboard for ${profile.name || profile.id}`, () => (
         this.writeDashboard(settings, profile)
       ));
@@ -469,6 +577,7 @@ export class SprintBaseGenerator {
       ));
       result.profilesGenerated += 1;
     }
+    await this.withContext('Write vault-root AI skills', () => this.writeVaultRootSkills(settings));
     await this.withContext('Update vault-root AI instructions', () => (
       settings.generateVaultRootInstructions
         ? this.writeVaultRootAgentInstructions(settings)
@@ -481,52 +590,19 @@ export class SprintBaseGenerator {
 
   async resetProfileRoot(settings: SprintSettings, profileId: string): Promise<void> {
     const profile = settings.profiles.find((candidate) => candidate.id === profileId);
-    if (!profile) throw new Error('Sprint profile not found.');
+    if (!profile) throw new Error('Sprint workspace not found.');
     const root = normalizeFolder(profile.rootFolder);
-    if (!root) throw new Error(`Set a project folder for ${profile.name || 'this sprint profile'} before resetting.`);
+    if (!root) throw new Error(`Set a Sprint folder for ${profile.name || 'this workspace'} before resetting.`);
     const existing = this.app.vault.getAbstractFileByPath(root);
     if (existing) await this.app.vault.delete(existing, true);
   }
 
-  private async removeObsoleteSprintBoardBase(
-    settings: SprintSettings,
-    profile: SprintProfile,
-  ): Promise<void> {
-    const root = normalizeFolder(profile.rootFolder);
-    if (!root) return;
-    const path = `${root}/Bases/Sprint Board.base`;
-    const existing = this.app.vault.getFileByPath(path);
-    if (!existing) return;
-    const current = await this.app.vault.read(existing);
-    if (current === standaloneSprintBoardContent(settings, profile)) {
-      await this.app.vault.delete(existing, true);
-      return;
-    }
-    console.warn(`[Sprint] Kept customized obsolete Base for manual review: ${path}`);
-  }
-
   private async migrateTasksBase(settings: SprintSettings, profile: SprintProfile): Promise<void> {
     const resolved = resolveSprintProfile(settings, profile);
-    const path = basePath(resolved.tasksBasePath);
-    const existing = this.app.vault.getFileByPath(path);
-    if (!existing) return;
-    const current = await this.app.vault.read(existing);
-    const boardlessTemplate = tasksBaseContent(settings, profile, false);
-    const hiddenCompletedTemplate = tasksBaseContent(settings, profile, true, false, false, false);
-    const previousTemplate = tasksBaseContent(settings, profile, true, true, false, false);
-    const currentSprintTemplate = tasksBaseContent(settings, profile, true, true, true, false);
-    const currentHiddenCompletedTemplate = tasksBaseContent(settings, profile, true, false, true, false);
-    const allViewsHiddenCompletedTemplate = tasksBaseContent(settings, profile, true, false, true, true);
-    if (
-      current === boardlessTemplate
-      || current === hiddenCompletedTemplate
-      || current === previousTemplate
-      || current === currentSprintTemplate
-      || current === currentHiddenCompletedTemplate
-      || current === allViewsHiddenCompletedTemplate
-    ) {
-      await this.app.vault.modify(existing, tasksBaseContent(settings, profile, true));
-    }
+    await this.migrateExistingBase(
+      basePath(resolved.tasksBasePath),
+      (content) => migrateTasksBaseContent(content, resolved.id),
+    );
   }
 
   private async migrateProjectsBase(settings: SprintSettings, profile: SprintProfile): Promise<void> {
@@ -534,10 +610,26 @@ export class SprintBaseGenerator {
     const path = basePath(resolved.projectsBasePath);
     const existing = this.app.vault.getFileByPath(path);
     if (!existing) return;
-    const current = await this.app.vault.read(existing);
-    if (current === projectsBaseContent(settings, profile, true)) {
-      await this.app.vault.modify(existing, projectsBaseContent(settings, profile));
+    const candidate = await this.app.vault.read(existing);
+    if (candidate === projectsBaseContent(settings, profile, true)) {
+      await this.app.vault.process(existing, (current) => (
+        current === projectsBaseContent(settings, profile, true)
+          ? projectsBaseContent(settings, profile)
+          : current
+      ));
     }
+    await this.migrateExistingBase(path, migrateProjectsBaseContent);
+  }
+
+  private async migrateExistingBase(
+    path: string,
+    migrate: (content: string) => string,
+  ): Promise<void> {
+    const existing = this.app.vault.getFileByPath(path);
+    if (!existing) return;
+    const candidate = await this.app.vault.read(existing);
+    if (migrate(candidate) === candidate) return;
+    await this.app.vault.process(existing, migrate);
   }
 
   private async ensureFolder(folder: string): Promise<void> {
@@ -565,14 +657,16 @@ export class SprintBaseGenerator {
     const instructions = sprintInstructions(settings, [profile]);
     await this.writeManagedFile(`${root}/AGENTS.md`, instructions);
     await this.writeManagedFile(`${root}/CLAUDE.md`, instructions);
-    await this.writeOwnedFile(
-      `${root}/.codex/skills/sprint/SKILL.md`,
-      skillInstructions(settings, [profile]),
-    );
-    await this.writeOwnedFile(
-      `${root}/.claude/skills/sprint/SKILL.md`,
-      skillInstructions(settings, [profile]),
-    );
+    await this.removeOwnedSkillFile(`${root}/.codex/skills/sprint/SKILL.md`);
+    await this.removeOwnedSkillFile(`${root}/.agents/skills/sprint/SKILL.md`);
+    await this.removeOwnedSkillFile(`${root}/.claude/skills/sprint/SKILL.md`);
+  }
+
+  private async writeVaultRootSkills(settings: SprintSettings): Promise<void> {
+    const content = sprintSkillContent(settings);
+    await this.removeOwnedSkillFile('.codex/skills/sprint/SKILL.md');
+    await this.writeOwnedFile('.agents/skills/sprint/SKILL.md', content);
+    await this.writeOwnedFile('.claude/skills/sprint/SKILL.md', content);
   }
 
   private async writeVaultRootAgentInstructions(settings: SprintSettings): Promise<void> {
@@ -589,7 +683,6 @@ export class SprintBaseGenerator {
 
   private async removeLegacyVaultRootSkills(): Promise<void> {
     await this.removeOwnedSkillFile('.codex/skills/sprint/SKILL.md');
-    await this.removeOwnedSkillFile('.claude/skills/sprint/SKILL.md');
   }
 
   private async writePropertyTypes(): Promise<void> {
@@ -607,6 +700,8 @@ export class SprintBaseGenerator {
       sprint: 'multitext',
       priority: 'number',
       due: 'date',
+      archived: 'checkbox',
+      hidden: 'checkbox',
       'due date': 'date',
     });
     parsed.types = types;
@@ -660,10 +755,18 @@ export class SprintBaseGenerator {
       const existing = this.app.vault.getFileByPath(note.path);
       if (existing) {
         const previous = previousSamples.get(note.path);
-        const current = await this.app.vault.read(existing);
-        if (previous && previous.content !== note.content && current === previous.content) {
-          await this.app.vault.modify(existing, note.content);
-        } else {
+        let migrated = false;
+        if (previous && previous.content !== note.content) {
+          const candidate = await this.app.vault.read(existing);
+          if (candidate === previous.content) {
+            await this.app.vault.process(existing, (current) => {
+              if (current !== previous.content) return current;
+              migrated = true;
+              return note.content;
+            });
+          }
+        }
+        if (!migrated) {
           if (note.sprintName) await this.assignSampleSprintIfMissing(existing, note.sprintName);
           if (note.removeDefaultOwner) await this.removeSampleDefaultOwner(existing);
         }
@@ -730,6 +833,7 @@ export class SprintBaseGenerator {
             'estimate: 1',
             'in progress: false',
             'is done: false',
+            ...(version === 'current' ? ['archived: false'] : []),
             'project:',
             '  - "[[Welcome to Agile PM]]"',
             ...sprintProperty(sprintOne),
@@ -749,6 +853,7 @@ export class SprintBaseGenerator {
             'estimate: 2',
             'in progress: false',
             'is done: false',
+            ...(version === 'current' ? ['archived: false'] : []),
             'project:',
             '  - "[[Welcome to Agile PM]]"',
             ...sprintProperty(sprintOne),
@@ -770,6 +875,7 @@ export class SprintBaseGenerator {
             'estimate: 3',
             'in progress: true',
             'is done: false',
+            ...(version === 'current' ? ['archived: false'] : []),
             'project:',
             '  - "[[Sprint system setup]]"',
             ...sprintProperty(sprintOne),
@@ -789,6 +895,7 @@ export class SprintBaseGenerator {
             'estimate: 1',
             'in progress: false',
             'is done: true',
+            ...(version === 'current' ? ['archived: false'] : []),
             'project:',
             '  - "[[Sprint system setup]]"',
             ...sprintProperty(sprintOne),
@@ -808,6 +915,7 @@ export class SprintBaseGenerator {
             'estimate: 2',
             'in progress: false',
             'is done: false',
+            ...(version === 'current' ? ['archived: false'] : []),
             'project:',
             '  - "[[Sprint system setup]]"',
             ...sprintProperty(sprintOne),
@@ -831,6 +939,7 @@ export class SprintBaseGenerator {
               'estimate: 2',
               'in progress: false',
               'is done: false',
+              'archived: false',
               'project:',
               '  - "[[Sprint system setup]]"',
               ...sprintProperty(sprintTwo),
@@ -850,6 +959,7 @@ export class SprintBaseGenerator {
               'estimate: 3',
               'in progress: false',
               'is done: false',
+              'archived: false',
               'project:',
               '  - "[[Welcome to Agile PM]]"',
               ...sprintProperty(sprintTwo),
@@ -890,25 +1000,22 @@ export class SprintBaseGenerator {
     if (!root) return;
 
     await this.ensureFolder(root);
-    const title = root.split('/').at(-1) || resolved.name || 'Agile PM';
-    const dashboardPath = `${root}/${title}.md`;
-    const sprints = this.readSprints(`${root}/Sprints`);
-    const current = sprints.find((sprint) => sprint.status === 'current') ?? null;
+    const dashboardPath = `${root}/${SPRINT_SUMMARY_FILENAME}`;
+    const legacyTitle = root.split('/').at(-1) || resolved.name || 'Sprint';
+    const legacyDashboardPath = `${root}/${legacyTitle}.md`;
+    const legacyDashboard = this.app.vault.getFileByPath(legacyDashboardPath);
+    if (
+      legacyDashboard
+      && legacyDashboardPath !== dashboardPath
+      && !this.app.vault.getAbstractFileByPath(dashboardPath)
+    ) {
+      await this.app.fileManager.renameFile(legacyDashboard, dashboardPath);
+    }
 
     const content = [
-      '## Current Sprint',
-      '',
-      current
-        ? `Current sprint: ${linkTo(current.path, current.name)} (${current.startDate ?? 'unknown'} to ${current.endDate ?? 'unknown'})`
-        : 'No current sprint has been generated yet.',
-      '',
       '## Current Tasks',
       '',
       `![[${resolved.tasksBasePath}#Current sprint]]`,
-      '',
-      '## Next Sprint Tasks',
-      '',
-      `![[${resolved.tasksBasePath}#Next sprint]]`,
       '',
       '---',
       '',
@@ -924,23 +1031,18 @@ export class SprintBaseGenerator {
       '',
     ].join('\n');
 
-    await this.writeFile(dashboardPath, `# ${title}\n\n${content}`);
-  }
-
-  private readSprints(folder: string): SprintSummary[] {
-    const prefix = `${normalizeFolder(folder)}/`;
-    return this.app.vault.getMarkdownFiles()
-      .filter((file) => file.path.startsWith(prefix) && !file.path.slice(prefix.length).includes('/'))
-      .map((file) => {
-        const frontmatter = this.getFrontmatter(file);
-        return {
-          name: file.basename,
-          path: file.path,
-          startDate: readDate(frontmatter['start date']),
-          endDate: readDate(frontmatter['end date']),
-          status: typeof frontmatter['sprint status'] === 'string' ? frontmatter['sprint status'] : null,
-        };
-      });
+    const existingDashboard = this.app.vault.getFileByPath(dashboardPath);
+    const existingContent = existingDashboard
+      ? await this.app.vault.read(existingDashboard)
+      : null;
+    const action = getSprintSummaryWriteAction(existingContent, content);
+    if (action === 'create') {
+      await this.writeFile(dashboardPath, content);
+      return;
+    }
+    if (action === 'preserve') {
+      console.warn(`[Sprint] Skipped user-edited Sprint Summary: ${dashboardPath}`);
+    }
   }
 
   private getFrontmatter(file: TFile): Record<string, unknown> {
@@ -953,27 +1055,39 @@ export class SprintBaseGenerator {
       await this.writeFile(path, `${initialContent}${managedContent(content)}`);
       return;
     }
-    const current = await this.app.vault.read(existing);
-    if (!current.includes(MANAGED_START) || !current.includes(MANAGED_END)) {
+    const candidate = await this.app.vault.read(existing);
+    if (!candidate.includes(MANAGED_START) || !candidate.includes(MANAGED_END)) {
       console.warn(`[Sprint] Skipped existing AI instruction file not managed by Sprint: ${path}`);
       return;
     }
-    await this.app.vault.modify(existing, replaceManagedSection(current, content));
+    let managed = false;
+    await this.app.vault.process(existing, (current) => {
+      if (!current.includes(MANAGED_START) || !current.includes(MANAGED_END)) return current;
+      managed = true;
+      return replaceManagedSection(current, content);
+    });
+    if (!managed) {
+      console.warn(`[Sprint] Skipped existing AI instruction file not managed by Sprint: ${path}`);
+    }
   }
 
   private async removeManagedFile(path: string): Promise<void> {
     const existing = this.app.vault.getFileByPath(path);
     if (!existing) return;
-    const current = await this.app.vault.read(existing);
-    const start = current.indexOf(MANAGED_START);
-    const end = current.indexOf(MANAGED_END);
-    if (start === -1 || end === -1 || end < start) return;
-    const remaining = `${current.slice(0, start)}${current.slice(end + MANAGED_END.length)}`.trim();
-    if (!remaining) {
-      await this.app.vault.delete(existing, true);
-      return;
-    }
-    await this.app.vault.modify(existing, `${remaining}\n`);
+    const candidate = await this.app.vault.read(existing);
+    if (!candidate.includes(MANAGED_START) || !candidate.includes(MANAGED_END)) return;
+    let removed = false;
+    let empty = false;
+    await this.app.vault.process(existing, (current) => {
+      const start = current.indexOf(MANAGED_START);
+      const end = current.indexOf(MANAGED_END);
+      if (start === -1 || end === -1 || end < start) return current;
+      removed = true;
+      const remaining = `${current.slice(0, start)}${current.slice(end + MANAGED_END.length)}`.trim();
+      empty = remaining.length === 0;
+      return empty ? '' : `${remaining}\n`;
+    });
+    if (removed && empty) await this.app.vault.delete(existing, true);
   }
 
   private async writeOwnedFile(path: string, content: string): Promise<void> {
@@ -983,12 +1097,20 @@ export class SprintBaseGenerator {
       await this.writeFile(path, content);
       return;
     }
-    const current = await this.app.vault.read(existing);
-    if (!current.includes(GENERATED_FILE_MARKER)) {
+    const candidate = await this.app.vault.read(existing);
+    if (!candidate.includes(GENERATED_FILE_MARKER)) {
       console.warn(`[Sprint] Skipped existing AI skill file not managed by Sprint: ${path}`);
       return;
     }
-    await this.app.vault.modify(existing, content);
+    let owned = false;
+    await this.app.vault.process(existing, (current) => {
+      if (!current.includes(GENERATED_FILE_MARKER)) return current;
+      owned = true;
+      return content;
+    });
+    if (!owned) {
+      console.warn(`[Sprint] Skipped existing AI skill file not managed by Sprint: ${path}`);
+    }
   }
 
   private async removeOwnedSkillFile(path: string): Promise<void> {
@@ -1006,7 +1128,7 @@ export class SprintBaseGenerator {
     await this.ensureFolder(baseFolder(path));
     const existing = this.app.vault.getFileByPath(path);
     if (existing) {
-      await this.app.vault.modify(existing, content);
+      await this.app.vault.process(existing, () => content);
       return;
     }
     try {
@@ -1015,7 +1137,7 @@ export class SprintBaseGenerator {
       if (!isAlreadyExistsError(error)) throw error;
       const raced = this.app.vault.getFileByPath(path);
       if (!raced) throw error;
-      await this.app.vault.modify(raced, content);
+      await this.app.vault.process(raced, () => content);
     }
   }
 }

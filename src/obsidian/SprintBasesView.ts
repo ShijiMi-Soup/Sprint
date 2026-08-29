@@ -1,11 +1,12 @@
 import type {
   BasesAllOptions,
   BasesEntry,
+  BasesPropertyId,
   BasesViewRegistration,
   QueryController,
   TFile,
 } from 'obsidian';
-import { BasesView, Notice } from 'obsidian';
+import { BasesView, normalizePath, Notice, setIcon } from 'obsidian';
 
 import type { SprintSettings } from '../domain/types';
 
@@ -22,6 +23,20 @@ export function applyTaskBoardState(
 ): void {
   frontmatter['in progress'] = state === 'In progress';
   frontmatter['is done'] = state === 'Done';
+}
+
+export function applyNewTaskFrontmatter(
+  frontmatter: Record<string, unknown>,
+  state: TaskBoardState,
+  projectTarget: string | null,
+  sprintTarget: string | null,
+  properties: Record<string, string | number>,
+): void {
+  applyTaskBoardState(frontmatter, state);
+  if (frontmatter.archived === undefined) frontmatter.archived = false;
+  if (projectTarget) frontmatter.project = [`[[${projectTarget}]]`];
+  if (sprintTarget) frontmatter.sprint = [`[[${sprintTarget}]]`];
+  Object.assign(frontmatter, properties);
 }
 
 export function getTaskProjectGroup(
@@ -45,13 +60,13 @@ export function getSprintBasesOptions(
   const profiles = Object.fromEntries(
     settings.profiles.map((profile) => [profile.id, profile.name]),
   );
-  if (Object.keys(profiles).length === 0) profiles.none = 'No sprint profiles';
+  if (Object.keys(profiles).length === 0) profiles.none = 'No Sprint workspace';
 
   return [
     {
       key: 'sprintProfile',
       type: 'dropdown',
-      displayName: 'Sprint profile',
+      displayName: 'Sprint workspace',
       default: settings.profiles[0]?.id ?? 'none',
       options: profiles,
     },
@@ -68,7 +83,63 @@ export function getSprintBasesOptions(
       displayName: 'Show completed tasks',
       default: true,
     },
+    {
+      type: 'group',
+      displayName: 'Task cards',
+      items: [1, 2, 3].map((position) => ({
+        key: `cardProperty${position}`,
+        type: 'property' as const,
+        displayName: `Property ${position}`,
+        default: position === 1 ? 'note.estimate' : undefined,
+        placeholder: position === 1 ? 'Estimate' : 'None',
+        filter: isCardTaskProperty,
+      })),
+    },
+    {
+      type: 'group',
+      displayName: 'New task form',
+      items: [1, 2, 3].map((position) => ({
+        key: `newTaskProperty${position}`,
+        type: 'property' as const,
+        displayName: `Property ${position}`,
+        default: position === 1 ? 'note.estimate' : undefined,
+        placeholder: position === 1 ? 'Estimate' : 'None',
+        filter: isEditableTaskProperty,
+      })),
+    },
   ];
+}
+
+function isCardTaskProperty(property: BasesPropertyId): boolean {
+  return property.startsWith('note.') && ![
+    'note.in progress',
+    'note.is done',
+    'note.archived',
+  ].includes(property);
+}
+
+function isEditableTaskProperty(property: BasesPropertyId): boolean {
+  return property.startsWith('note.') && ![
+    'note.project',
+    'note.sprint',
+    'note.in progress',
+    'note.is done',
+    'note.archived',
+  ].includes(property);
+}
+
+export function getEditableTaskProperties(value: unknown): string[] {
+  if (!Array.isArray(value)) return ['estimate'];
+  return [...new Set(value
+    .filter((entry): entry is string => typeof entry === 'string')
+    .map((entry) => entry.trim().replace(/^note\./, ''))
+    .filter((entry) => entry.length > 0 && ![
+      'project',
+      'sprint',
+      'in progress',
+      'is done',
+      'archived',
+    ].includes(entry)))];
 }
 
 function sprintReferences(value: unknown, sprintName: string): boolean {
@@ -105,10 +176,10 @@ export function getEstimateTone(points: number): 'low' | 'medium' | 'high' | 'cr
 class SprintBasesView extends BasesView {
   readonly type = SPRINT_BASES_VIEW_TYPE;
   private readonly containerEl: HTMLElement;
-  private readonly embedded: boolean;
   private draggedTaskPath: string | null = null;
   private draggedTaskEl: HTMLElement | null = null;
   private draggedProjectGroup: string | null = null;
+  private readonly collapsedProjects = new Set<string>();
 
   constructor(
     controller: QueryController,
@@ -116,18 +187,11 @@ class SprintBasesView extends BasesView {
     private readonly getSettings: () => SprintSettings,
   ) {
     super(controller);
-    this.embedded = parentEl.closest('.bases-embed') !== null;
     this.containerEl = parentEl.createDiv({ cls: 'sprint-bases-view' });
   }
 
   onDataUpdated(): void {
     this.containerEl.empty();
-    console.debug('[Sprint][temporary-bases-debug] Sprint board data updated', {
-      view: this.config.name,
-      entries: this.data.data.length,
-      groups: this.data.groupedData.length,
-      embedded: this.embedded,
-    });
 
     const profileId = String(
       this.config.get('sprintProfile') ?? this.getSettings().profiles[0]?.id ?? '',
@@ -137,7 +201,7 @@ class SprintBasesView extends BasesView {
     header.createEl('h3', { text: this.config.name });
     header.createSpan({
       cls: 'sprint-bases-profile',
-      text: profile?.name ?? 'Unassigned profile',
+      text: profile?.name ?? 'Unassigned workspace',
     });
 
     const configuredLayout = this.config.get('layout');
@@ -146,8 +210,12 @@ class SprintBasesView extends BasesView {
       cls: `sprint-bases-content sprint-bases-${layout}`,
     });
     const showCompleted = this.config.get('showCompleted') !== false;
+    if (this.config.get('itemType') === 'sprint') {
+      this.renderSprintOverview(content, profile?.rootFolder ?? '');
+      return;
+    }
     if (layout === 'kanban') {
-      this.renderKanban(content, showCompleted);
+      this.renderKanban(content, showCompleted, profile);
       return;
     }
 
@@ -179,16 +247,44 @@ class SprintBasesView extends BasesView {
     }
   }
 
-  private renderKanban(content: HTMLElement, showCompleted: boolean): void {
+  private renderKanban(
+    content: HTMLElement,
+    showCompleted: boolean,
+    profile: SprintSettings['profiles'][number] | undefined,
+  ): void {
     const projects = new Map<string, Map<TaskBoardState, BasesEntry[]>>();
+    const projectTargets = new Map<string, string>();
+    const projectFileByGroup = new Map<string, TFile>();
+    const projectFiles = profile?.rootFolder
+      ? this.filesIn(`${profile.rootFolder.replace(/^\/+|\/+$/g, '')}/Projects`)
+      : [];
+    const projectFileByName = new Map(projectFiles.map((file) => [file.basename, file]));
+    const scoped = this.config.get('sprintScope') === 'current'
+      || this.config.get('sprintScope') === 'next';
+    const isActiveProject = (file: TFile): boolean => {
+      const frontmatter = this.app.metadataCache.getFileCache(file)?.frontmatter;
+      return frontmatter?.['in progress'] === true && frontmatter?.['is done'] !== true;
+    };
+    const findProjectFile = (frontmatter: Record<string, unknown> | undefined): TFile | null => {
+      const target = this.getReferenceTarget(frontmatter?.project);
+      if (!target) return null;
+      const direct = this.app.vault.getFileByPath(`${target}.md`);
+      return direct ?? projectFileByName.get(target.split('/').at(-1) ?? '') ?? null;
+    };
     const seen = new Set<string>();
     for (const group of this.data.groupedData) {
       for (const entry of group.entries) {
         if (seen.has(entry.file.path)) continue;
         seen.add(entry.file.path);
         const frontmatter = this.app.metadataCache.getFileCache(entry.file)?.frontmatter;
+        if (frontmatter?.archived === true) continue;
         if (!showCompleted && isDone(frontmatter)) continue;
+        const projectFile = findProjectFile(frontmatter);
+        if (scoped && projectFile && !isActiveProject(projectFile)) continue;
         const project = getTaskProjectGroup(frontmatter);
+        if (projectFile) projectFileByGroup.set(project, projectFile);
+        const projectTarget = this.getReferenceTarget(frontmatter?.project);
+        if (projectTarget) projectTargets.set(project, projectTarget);
         const columns = projects.get(project) ?? new Map(
           TASK_STATES.map((state) => [state, [] as BasesEntry[]]),
         );
@@ -197,24 +293,75 @@ class SprintBasesView extends BasesView {
       }
     }
 
+    if (profile?.rootFolder) {
+      for (const projectFile of projectFiles) {
+        if (scoped && !isActiveProject(projectFile)) continue;
+        if (!projects.has(projectFile.basename)) {
+          projects.set(projectFile.basename, new Map(
+            TASK_STATES.map((state) => [state, [] as BasesEntry[]]),
+          ));
+        }
+        projectTargets.set(projectFile.basename, projectFile.path.replace(/\.md$/, ''));
+        projectFileByGroup.set(projectFile.basename, projectFile);
+      }
+    }
+    if (!projects.has('No project')) {
+      projects.set('No project', new Map(
+        TASK_STATES.map((state) => [state, [] as BasesEntry[]]),
+      ));
+    }
+
     const sortedProjects = [...projects.entries()].sort(([left], [right]) => {
       if (left === 'No project') return 1;
       if (right === 'No project') return -1;
       return left.localeCompare(right);
     });
-    if (sortedProjects.length === 0) {
-      content.createDiv({ cls: 'sprint-bases-empty', text: 'No tasks match this view.' });
-      return;
+    const visibleProjects: typeof sortedProjects = [];
+    const hiddenProjects: typeof sortedProjects = [];
+    for (const item of sortedProjects) {
+      const [project] = item;
+      const projectFile = projectFileByGroup.get(project);
+      const hidden = projectFile
+        ? this.app.metadataCache.getFileCache(projectFile)?.frontmatter?.hidden === true
+        : false;
+      (hidden ? hiddenProjects : visibleProjects).push(item);
     }
 
-    for (const [project, columns] of sortedProjects) {
-      const projectSection = content.createDiv({ cls: 'sprint-bases-project' });
-      const projectHeader = projectSection.createDiv({ cls: 'sprint-bases-project-header' });
-      projectHeader.createEl('h4', { text: project });
+    const renderProject = (
+      parent: HTMLElement,
+      project: string,
+      columns: Map<TaskBoardState, BasesEntry[]>,
+      hidden: boolean,
+    ): void => {
+      const projectSection = parent.createEl('details', { cls: 'sprint-bases-project' });
+      projectSection.open = !this.collapsedProjects.has(project);
+      projectSection.addEventListener('toggle', () => {
+        if (projectSection.open) this.collapsedProjects.delete(project);
+        else this.collapsedProjects.add(project);
+      });
+      const projectHeader = projectSection.createEl('summary', { cls: 'sprint-bases-project-header' });
+      projectHeader.createSpan({ cls: 'sprint-bases-project-title', text: project });
       projectHeader.createSpan({
         cls: 'sprint-bases-project-count',
         text: String([...columns.values()].reduce((total, entries) => total + entries.length, 0)),
       });
+      const projectFile = projectFileByGroup.get(project);
+      if (projectFile) {
+        const visibility = projectHeader.createEl('button', {
+          cls: 'sprint-bases-project-visibility clickable-icon',
+          attr: {
+            type: 'button',
+            'aria-label': hidden ? 'Show project' : 'Hide project',
+            title: hidden ? 'Show project' : 'Hide project',
+          },
+        });
+        setIcon(visibility, hidden ? 'eye' : 'eye-off');
+        visibility.addEventListener('click', (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          void this.setProjectHidden(projectFile, !hidden);
+        });
+      }
       const board = projectSection.createDiv({ cls: 'sprint-bases-project-board' });
       for (const state of TASK_STATES) {
         const section = board.createDiv({
@@ -231,8 +378,252 @@ class SprintBasesView extends BasesView {
         for (const entry of stateEntries) {
           this.renderTaskCard(entries, entry, project);
         }
+        this.renderNewTaskControl(
+          entries,
+          state,
+          project,
+          projectTargets.get(project) ?? null,
+          profile,
+        );
+      }
+    };
+
+    for (const [project, columns] of visibleProjects) {
+      renderProject(content, project, columns, false);
+    }
+    if (hiddenProjects.length > 0) {
+      const hiddenSection = content.createEl('details', { cls: 'sprint-bases-hidden-projects' });
+      hiddenSection.createEl('summary', {
+        cls: 'sprint-bases-hidden-header',
+        text: `Hidden (${hiddenProjects.length})`,
+      });
+      const hiddenContent = hiddenSection.createDiv({ cls: 'sprint-bases-hidden-content' });
+      for (const [project, columns] of hiddenProjects) {
+        renderProject(hiddenContent, project, columns, true);
       }
     }
+  }
+
+  private async setProjectHidden(file: TFile, hidden: boolean): Promise<void> {
+    try {
+      await this.app.fileManager.processFrontMatter(file, (frontmatter) => {
+        frontmatter.hidden = hidden;
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      new Notice(`Unable to update project visibility: ${message}`);
+    }
+  }
+
+  private renderNewTaskControl(
+    entries: HTMLElement,
+    state: TaskBoardState,
+    project: string,
+    projectTarget: string | null,
+    profile: SprintSettings['profiles'][number] | undefined,
+  ): void {
+    if (!profile?.rootFolder) return;
+    const button = entries.createEl('button', {
+      cls: 'sprint-bases-new-task',
+      attr: { type: 'button' },
+    });
+    const icon = button.createSpan({ cls: 'sprint-bases-new-task-icon' });
+    setIcon(icon, 'plus');
+    button.createSpan({ text: 'New task' });
+
+    const form = entries.createEl('form', { cls: 'sprint-bases-new-task-form' });
+    form.hidden = true;
+    const nameInput = form.createEl('input', {
+      cls: 'sprint-bases-new-task-name',
+      attr: { type: 'text', placeholder: 'Task name', 'aria-label': 'Task name' },
+    });
+    const propertyInputs = new Map<string, HTMLInputElement>();
+    const configuredProperties = [1, 2, 3]
+      .map((position) => this.config.getAsPropertyId(`newTaskProperty${position}`))
+      .filter((property): property is BasesPropertyId => property !== null);
+    for (const property of getEditableTaskProperties(configuredProperties)) {
+      const propertyId: `note.${string}` = `note.${property}`;
+      const field = form.createDiv({ cls: 'sprint-bases-new-task-field' });
+      const fieldIcon = field.createSpan({ cls: 'sprint-bases-new-task-field-icon' });
+      setIcon(fieldIcon, property === 'due' || property === 'due date' ? 'calendar' : 'circle-gauge');
+      const input = field.createEl('input', {
+        attr: {
+          type: property === 'due' || property === 'due date'
+            ? 'date'
+            : property === 'estimate' || property === 'priority' ? 'number' : 'text',
+          placeholder: this.config.getDisplayName(propertyId),
+          'aria-label': this.config.getDisplayName(propertyId),
+          ...(property === 'estimate' || property === 'priority' ? { min: '0', step: '1' } : {}),
+        },
+      });
+      propertyInputs.set(property, input);
+    }
+    const actions = form.createDiv({ cls: 'sprint-bases-new-task-actions' });
+    const cancel = actions.createEl('button', { text: 'Cancel', attr: { type: 'button' } });
+    const create = actions.createEl('button', {
+      text: 'Create',
+      cls: 'mod-cta',
+      attr: { type: 'submit' },
+    });
+
+    const close = (): void => {
+      form.reset();
+      form.hidden = true;
+      button.hidden = false;
+      button.setAttribute('aria-expanded', 'false');
+    };
+    button.setAttribute('aria-expanded', 'false');
+    button.addEventListener('click', () => {
+      button.hidden = true;
+      form.hidden = false;
+      button.setAttribute('aria-expanded', 'true');
+      nameInput.focus();
+    });
+    cancel.addEventListener('click', close);
+    form.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') close();
+    });
+    form.addEventListener('submit', (event) => {
+      event.preventDefault();
+      const name = nameInput.value.trim();
+      if (!name) {
+        nameInput.focus();
+        return;
+      }
+      create.disabled = true;
+      void this.createTask(
+        name,
+        state,
+        project === 'No project' ? null : projectTarget,
+        profile.rootFolder,
+        propertyInputs,
+      ).then(() => close()).catch(() => undefined).finally(() => { create.disabled = false; });
+    });
+  }
+
+  private async createTask(
+    name: string,
+    state: TaskBoardState,
+    projectTarget: string | null,
+    rootFolder: string,
+    propertyInputs: Map<string, HTMLInputElement>,
+  ): Promise<void> {
+    const folder = normalizePath(`${rootFolder}/Tasks`).replace(/^\/+/, '');
+    const safeName = name.replace(/[\\/:*?"<>|]/g, '-').replace(/\.+$/g, '').trim();
+    if (!safeName) {
+      new Notice('Enter a valid task name.');
+      throw new Error('Invalid task name');
+    }
+    let path = `${folder}/${safeName}.md`;
+    let suffix = 2;
+    while (this.app.vault.getAbstractFileByPath(path)) {
+      path = `${folder}/${safeName} ${suffix}.md`;
+      suffix += 1;
+    }
+
+    let file: TFile | null = null;
+    try {
+      file = await this.app.vault.create(path, '');
+      const sprint = this.getSprintForNewTask(rootFolder);
+      const properties: Record<string, string | number> = {};
+      for (const [property, input] of propertyInputs) {
+        const value = input.value.trim();
+        if (!value) continue;
+        properties[property] = input.type === 'number' ? Number(value) : value;
+      }
+      await this.app.fileManager.processFrontMatter(file, (frontmatter) => {
+        applyNewTaskFrontmatter(
+          frontmatter as Record<string, unknown>,
+          state,
+          projectTarget,
+          sprint,
+          properties,
+        );
+      });
+      new Notice(`Task created: ${file.basename}`);
+    } catch (error) {
+      if (file) await this.app.vault.delete(file);
+      const message = error instanceof Error ? error.message : String(error);
+      new Notice(`Unable to create task: ${message}`);
+      throw error;
+    }
+  }
+
+  private getSprintForNewTask(rootFolder: string): string | null {
+    const configuredScope = this.config.get('sprintScope');
+    const scope = configuredScope === 'next' ? 'next' : 'current';
+    const sprint = this.filesIn(`${rootFolder.replace(/^\/+|\/+$/g, '')}/Sprints`)
+      .find((file) => this.app.metadataCache.getFileCache(file)?.frontmatter?.['sprint status'] === scope);
+    return sprint?.path.replace(/\.md$/, '') ?? null;
+  }
+
+  private getReferenceTarget(value: unknown): string | null {
+    const values = Array.isArray(value) ? value : [value];
+    const reference = values.find((entry): entry is string => typeof entry === 'string' && entry.trim().length > 0);
+    if (!reference) return null;
+    return reference.trim().replace(/^\[\[/, '').replace(/\]\]$/, '').split('|')[0]?.trim() || null;
+  }
+
+  private renderSprintOverview(content: HTMLElement, rootFolder: string): void {
+    const root = rootFolder.replace(/^\/+|\/+$/g, '');
+    const tasks = this.filesIn(`${root}/Tasks`);
+    let rendered = 0;
+    for (const group of this.data.groupedData) {
+      const section = content.createDiv({ cls: 'sprint-overview-group' });
+      section.createEl('h4', { text: group.hasKey() ? group.key?.toString() : 'Sprints' });
+      const cards = section.createDiv({ cls: 'sprint-overview-cards' });
+      for (const entry of group.entries) {
+        rendered += 1;
+        const frontmatter = this.app.metadataCache.getFileCache(entry.file)?.frontmatter;
+        const sprintTasks = tasks.filter((task) => sprintReferences(
+          this.app.metadataCache.getFileCache(task)?.frontmatter?.sprint,
+          entry.file.basename,
+        ));
+        const completed = sprintTasks.filter((task) => isDone(
+          this.app.metadataCache.getFileCache(task)?.frontmatter,
+        ));
+        const totalPoints = sprintTasks.reduce((sum, task) => (
+          sum + estimate(this.app.metadataCache.getFileCache(task)?.frontmatter)
+        ), 0);
+        const completedPoints = completed.reduce((sum, task) => (
+          sum + estimate(this.app.metadataCache.getFileCache(task)?.frontmatter)
+        ), 0);
+        const card = cards.createDiv({ cls: 'sprint-overview-card' });
+        const title = card.createEl('button', {
+          cls: 'sprint-overview-title',
+          text: entry.file.basename,
+          attr: { type: 'button' },
+        });
+        title.addEventListener('click', () => {
+          void this.app.workspace.openLinkText(entry.file.path, '', false);
+        });
+        card.createDiv({
+          cls: 'sprint-overview-dates',
+          text: `${String(frontmatter?.['start date'] ?? 'Unknown')} to ${String(frontmatter?.['end date'] ?? 'Unknown')}`,
+        });
+        const metrics = card.createDiv({ cls: 'sprint-overview-metrics' });
+        metrics.createSpan({ text: `${completed.length}/${sprintTasks.length} tasks` });
+        metrics.createSpan({ text: `${completedPoints}/${totalPoints} pt` });
+        const notes = card.createDiv({ cls: 'sprint-overview-notes' });
+        notes.createSpan({
+          cls: frontmatter?.review ? 'is-complete' : '',
+          text: frontmatter?.review ? 'Review added' : 'No review',
+        });
+        notes.createSpan({
+          cls: frontmatter?.retrospective ? 'is-complete' : '',
+          text: frontmatter?.retrospective ? 'Retrospective added' : 'No retrospective',
+        });
+      }
+    }
+    if (rendered === 0) {
+      content.createDiv({ cls: 'sprint-bases-empty', text: 'No sprints match this view.' });
+    }
+  }
+
+  private filesIn(folder: string): TFile[] {
+    const prefix = `${folder}/`;
+    return this.app.vault.getMarkdownFiles()
+      .filter((file) => file.path.startsWith(prefix) && !file.path.slice(prefix.length).includes('/'));
   }
 
   private renderTaskCard(entries: HTMLElement, entry: BasesEntry, project: string): void {
@@ -247,14 +638,34 @@ class SprintBasesView extends BasesView {
       },
     });
     link.createSpan({ cls: 'sprint-bases-entry-title', text: entry.file.basename });
-    const points = estimate(frontmatter);
-    if (points > 0) {
-      const meta = link.createSpan({ cls: 'sprint-bases-entry-meta' });
+    const configuredProperties = [1, 2, 3]
+      .map((position) => this.config.getAsPropertyId(`cardProperty${position}`))
+      .filter((property): property is BasesPropertyId => property !== null);
+    const meta = link.createSpan({ cls: 'sprint-bases-entry-meta' });
+    let renderedMetadata = false;
+    for (const propertyId of configuredProperties) {
+      const property = String(propertyId).replace(/^note\./, '');
+      const value = frontmatter?.[property];
+      if (property === 'estimate') {
+        const points = estimate(frontmatter);
+        if (points <= 0) continue;
+        meta.createSpan({
+          cls: `sprint-bases-entry-points sprint-bases-entry-points--${getEstimateTone(points)}`,
+          text: `${points} pt`,
+        });
+        renderedMetadata = true;
+        continue;
+      }
+      const displayValue = this.formatCardProperty(value);
+      if (!displayValue) continue;
+      const label = this.config.getDisplayName(propertyId);
       meta.createSpan({
-        cls: `sprint-bases-entry-points sprint-bases-entry-points--${getEstimateTone(points)}`,
-        text: `${points} pt`,
+        cls: 'sprint-bases-entry-property',
+        text: property === 'sprint' ? displayValue : `${label}: ${displayValue}`,
       });
+      renderedMetadata = true;
     }
+    if (!renderedMetadata) meta.remove();
     let dragged = false;
     link.addEventListener('dragstart', (event) => {
       dragged = true;
@@ -281,6 +692,19 @@ class SprintBasesView extends BasesView {
       }
       void this.app.workspace.openLinkText(entry.file.path, '', false);
     });
+  }
+
+  private formatCardProperty(value: unknown): string {
+    if (Array.isArray(value)) {
+      return value.map((entry) => this.formatCardProperty(entry)).filter(Boolean).join(', ');
+    }
+    if (typeof value === 'string') {
+      const normalized = value.trim().replace(/^\[\[/, '').replace(/\]\]$/, '');
+      const [target = '', alias] = normalized.split('|');
+      return alias?.trim() || target.split('/').at(-1)?.trim() || '';
+    }
+    if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+    return '';
   }
 
   private registerDropTarget(
@@ -397,7 +821,6 @@ export function selectRecentVelocityPoints(points: VelocityPoint[]): VelocityPoi
 class SprintVelocityView extends BasesView {
   readonly type = SPRINT_VELOCITY_VIEW_TYPE;
   private readonly containerEl: HTMLElement;
-  private readonly embedded: boolean;
 
   constructor(
     controller: QueryController,
@@ -405,7 +828,6 @@ class SprintVelocityView extends BasesView {
     private readonly getSettings: () => SprintSettings,
   ) {
     super(controller);
-    this.embedded = parentEl.closest('.bases-embed') !== null;
     this.containerEl = parentEl.createDiv({ cls: 'sprint-velocity-view' });
   }
 
@@ -420,23 +842,15 @@ class SprintVelocityView extends BasesView {
     header.createEl('h3', { text: this.config.name });
     header.createSpan({
       cls: 'sprint-bases-profile',
-      text: profile?.name ?? 'Unassigned profile',
+      text: profile?.name ?? 'Unassigned workspace',
     });
 
     if (!profile?.rootFolder) {
-      this.containerEl.createDiv({ cls: 'sprint-velocity-empty', text: 'No sprint profile selected.' });
+      this.containerEl.createDiv({ cls: 'sprint-velocity-empty', text: 'No Sprint workspace selected.' });
       return;
     }
 
     const points = this.getVelocityPoints(profile.rootFolder);
-    console.debug('[Sprint][temporary-bases-debug] Velocity data updated', {
-      view: this.config.name,
-      queryEntries: this.data.data.length,
-      sprintFiles: this.filesIn(`${profile.rootFolder.replace(/^\/+|\/+$/g, '')}/Sprints`).length,
-      taskFiles: this.filesIn(`${profile.rootFolder.replace(/^\/+|\/+$/g, '')}/Tasks`).length,
-      points: points.length,
-      embedded: this.embedded,
-    });
     if (points.length === 0) {
       this.containerEl.createDiv({ cls: 'sprint-velocity-empty', text: 'No completed sprint estimates yet.' });
       return;

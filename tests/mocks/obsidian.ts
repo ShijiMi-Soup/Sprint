@@ -31,3 +31,12 @@ export class Modal {
 export function normalizePath(path: string): string {
   return path.replace(/\\/g, '/').replace(/\/{2,}/g, '/');
 }
+
+export function parseYaml(yaml: string): unknown {
+  return parse(yaml);
+}
+
+export function stringifyYaml(value: unknown): string {
+  return stringify(value);
+}
+import { parse, stringify } from 'yaml';

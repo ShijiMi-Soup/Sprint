@@ -27,7 +27,10 @@ describe('ObsidianSprintVault', () => {
         create: jest.fn(async () => {
           throw new Error('File already exists.');
         }),
-        modify: jest.fn(),
+        process: jest.fn(async (
+          _file: { path: string },
+          update: (content: string) => string,
+        ) => update('')),
       },
       metadataCache: {},
       fileManager: {},
@@ -43,9 +46,11 @@ describe('ObsidianSprintVault', () => {
       note: { path: 'Agile PM/Sprints/Sprint 1.md', basename: 'Sprint 1' },
       created: false,
     });
-    expect(app.vault.modify).toHaveBeenCalledWith(
+    expect(app.vault.process).toHaveBeenCalledWith(
       file,
-      expect.stringContaining('sprint number: 1'),
+      expect.any(Function),
     );
+    const update = app.vault.process.mock.calls[0]?.[1];
+    expect(update?.('')).toContain('sprint number: 1');
   });
 });

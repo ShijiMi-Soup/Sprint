@@ -25,12 +25,15 @@ export interface SprintProfile {
   sprintsBasePath: string;
   projectsBasePath: string;
   anchorDate: string;
+  samplesInitialized?: boolean;
   overrides: SprintProfileOverrides;
 }
 
 export interface SprintSettings {
   enabled: boolean;
+  supportSchemaVersion: number;
   generateVaultRootInstructions: boolean;
+  skillCustomInstructions: Record<string, string>;
   defaults: SprintDefaults;
   profiles: SprintProfile[];
 }

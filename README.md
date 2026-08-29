@@ -1,90 +1,109 @@
 # Sprint
 
-Sprint is provider-independent sprint management for Obsidian. It generates sprint notes, maintains sprint lifecycle metadata, rolls incomplete tasks forward, and provides profile-aware Bases views without requiring an AI provider.
+Sprint adds automatic sprint planning and project-based Kanban boards to Obsidian. It creates sprint notes on a configurable cadence, rolls unfinished work forward, and provides task, sprint, velocity, and project views using Obsidian Bases.
 
-The repository produces both:
-
-- A standalone Obsidian plugin with the ID `sprint`.
-- An embeddable `@sprint-agent/sprint` module for Sprint Agent or other host plugins.
-
-See [MIGRATION.md](MIGRATION.md) for the extraction boundary and compatibility contracts.
-See [docs/PROJECT_LOG.md](docs/PROJECT_LOG.md) for the full project history, latest product direction, and new-workspace handoff.
-See [docs/TEMPORARY_DEBUGGING.md](docs/TEMPORARY_DEBUGGING.md) for temporary diagnostics and their removal criteria.
+Sprint works without an AI provider. It can optionally install local skills that teach Claude Code and compatible coding agents how to work with the generated task structure.
 
 ## Features
 
-- Global defaults for sprint duration, start day, rollover policy, future sprint count, and naming.
-- Multiple sprint profiles with independent roots, Tasks/Sprints/Projects Base associations, cadence anchors, and overrides.
 - Automatic current and future sprint generation on a 1-8 week cadence.
-- Catch-up generation after Obsidian has been closed for one or more cycles.
-- Current, next, last, past, and future lifecycle metadata.
-- Incomplete-task rollover to the current sprint, backlog, or original sprint.
-- Automatic generation of Tasks, Sprints, and Projects `.base` files.
-- Vault-local AI instructions for Codex and Claude Code.
-- Agile PM dashboard notes with current tasks, velocity charts, current-sprint scope, and project views.
-- Native Obsidian Bases board/list view with profile and completed-task options stored in `.base` files.
-- Review and retrospective fields on generated sprint notes.
-- A public integration API with no dependency on Claudian or an AI provider.
+- Catch-up generation after Obsidian has been closed for one or more sprint cycles.
+- Configurable rollover of unfinished tasks to the current sprint, backlog, or original sprint.
+- Project-grouped Kanban boards for all, current, and next-sprint tasks.
+- Drag-and-drop task state changes and inline task creation.
+- Collapsible and hideable project sections.
+- Configurable task-card and new-task properties.
+- Task archiving without deleting the underlying notes.
+- Sprint overview cards with dates, completed tasks, completed points, reviews, and retrospectives.
+- A dependency-free velocity bar chart.
+- A generated Sprint Summary and an **Open Sprint Summary** command.
+- Optional vault-local skills for Claude Code and agents that support the Agent Skills convention.
 
-## Standalone Usage
+## Requirements
+
+- Obsidian 1.10.0 or later.
+- The Obsidian Bases core plugin enabled.
+
+## Installation
+
+### Community Plugins
+
+After Sprint is accepted into the community directory:
+
+1. Open **Settings -> Community plugins**.
+2. Select **Browse** and search for **Sprint**.
+3. Install and enable Sprint.
+
+### Manual Installation
+
+1. Download `main.js`, `manifest.json`, and `styles.css` from the latest GitHub release.
+2. Place the files in `<vault>/.obsidian/plugins/sprint/`.
+3. Reload Obsidian and enable Sprint under **Community plugins**.
+
+## Getting Started
 
 1. Open **Settings -> Sprint**.
-2. Enable automatic sprints and configure the global defaults.
-3. Configure a profile with its project root, Tasks Base, Sprints Base, Projects Base, and cadence anchor.
-4. Run **Sprint: Sync sprints** from the command palette. Missing Base files, AI instructions, and dashboard notes are generated before sync.
-5. Add the **Sprint** view to an associated `.base` file and select the profile.
+2. Review the Sprint folder, cadence anchor, duration, start day, and rollover settings.
+3. Turn on **Automatic sprints** and confirm the file-creation warning.
+4. Open the command palette and run **Sprint: Open Sprint Summary**.
 
-The expected default profile layout is:
+The first initialization creates tutorial projects and tasks to demonstrate the workflow. They are created only once. Deleting them later does not cause them to reappear on startup.
+
+The default vault layout is:
 
 ```text
-Agile PM/
-├── Bases/
-│   ├── Tasks.base
-│   ├── Sprints.base
-│   └── Projects.base
-├── Projects/
-├── Tasks/
-├── Sprints/
+Vault root/
+├── .agents/skills/sprint/SKILL.md
 ├── .claude/skills/sprint/SKILL.md
-├── .codex/skills/sprint/SKILL.md
-├── AGENTS.md
-├── CLAUDE.md
-├── Agile PM.md
-└── ...
+└── Sprint/
+    ├── Tasks.base
+    ├── Sprints.base
+    ├── Projects.base
+    ├── Projects/
+    ├── Tasks/
+    ├── Sprints/
+    ├── AGENTS.md
+    ├── CLAUDE.md
+    └── Sprint Summary.md
 ```
 
-Sprint creates AI instruction and skill files inside each profile root. Existing unmarked instruction files are never changed. Vault-root `AGENTS.md` and `CLAUDE.md` generation is available as an opt-in setting.
+## Using Sprint
 
-## Embedding
+### Task States
 
-`SprintFeature` accepts an Obsidian `Plugin` host and an optional settings store. Its default store uses the host plugin's `data.json` while preserving unrelated data under a namespaced `sprint` key.
+Sprint derives three task states from two checkbox properties:
 
-```ts
-import { SprintFeature } from '@sprint-agent/sprint';
+| State | `in progress` | `is done` |
+| --- | --- | --- |
+| Not started | `false` | `false` |
+| In progress | `true` | `false` |
+| Done | Either value | `true` |
 
-export default class HostPlugin extends Plugin {
-  private sprint?: SprintFeature;
+Dragging a card between Kanban columns updates these properties. Checking `archived` removes a task from sprint boards while keeping it in the Tasks table and vault.
 
-  async onload(): Promise<void> {
-    this.sprint = new SprintFeature(this);
-    await this.sprint.load();
-  }
-}
-```
+### Project Visibility
 
-The integration API exposes current settings, ordered settings updates, and synchronization:
+Projects can be collapsed or hidden from sprint boards. Hidden projects remain available under the board's **Hidden** section. Current and next sprint boards show only projects in progress; the full Sprint board also shows projects that are not started or done.
 
-```ts
-await sprint.updateSettings((settings) => {
-  settings.defaults.durationWeeks = 2;
-});
+### Generated Files and Migrations
 
-const result = await sprint.sync();
-```
+Sprint creates missing support files during first-time setup and applies versioned, additive migrations when its managed schema changes. Existing task and project notes are not reset during normal startup. Custom Base views, properties, and unknown view settings are preserved.
 
-## Optional Agent Integrations
+Changing the Sprint folder through the rename action moves the existing workspace and updates configured Base paths. **Reset Sprint workspace** is destructive and requires typing `Yes, delete.` before Sprint deletes and recreates the configured folder.
 
-Sprint does not load an AI agent. [docs/AGENT_GUIDE.md](docs/AGENT_GUIDE.md) documents the task and sprint rules that an external agent integration can add to its own prompt or skill system. Sprint Agent is responsible for injecting that guide, provider integration, permissions, and agent personality.
+## AI Skills
+
+Sprint installs its own skill at `.agents/skills/sprint/SKILL.md` and `.claude/skills/sprint/SKILL.md` in the vault root. Existing folders, unrelated skills, and unmanaged files are preserved.
+
+Sprint also creates managed `AGENTS.md` and `CLAUDE.md` files inside the Sprint workspace. Creating corresponding instruction files at the vault root is optional and disabled by default because a vault may already contain user-managed instructions. The generated skill and vault-specific additions can be reviewed and edited from Sprint settings.
+
+Sprint does not send vault content over the network or invoke an AI model. External AI tools run independently and have their own permissions and privacy behavior.
+
+## Commands
+
+- **Sprint: Open Sprint Summary** opens the generated dashboard.
+- **Sprint: Sync sprints** creates missing sprint notes, updates lifecycle states, and applies rollover rules.
+- **Sprint: Generate sprint Bases** creates missing support files and applies managed Base schema updates.
 
 ## Development
 
@@ -93,19 +112,17 @@ npm install
 npm run check
 ```
 
-The production build creates `main.js`, `styles.css`, and an embeddable ESM module under `dist/`.
-
-## Architecture
+The production build creates the standalone `main.js` and `styles.css` files and an embeddable ESM module under `dist/`.
 
 ```text
-src/domain/        Scheduling, profiles, rollover, and contracts
+src/domain/        Scheduling, workspace settings, rollover, and contracts
 src/obsidian/      Vault, Bases, settings, and storage adapters
 src/SprintFeature  Embeddable lifecycle and public API
-src/main.ts        Standalone Obsidian entry point
+src/main.ts        Standalone plugin entry point
 ```
 
-The domain layer is tested to remain independent of Obsidian and AI integrations.
+`src/domain/` is independent of Obsidian and AI integrations. See [docs/AGENT_GUIDE.md](docs/AGENT_GUIDE.md) for the rules exposed to optional external agents and [docs/DEVLOG.md](docs/DEVLOG.md) for development history.
 
 ## License
 
-MIT License. Copyright 2026 Shijimi.
+[MIT](LICENSE) Copyright 2026 Shijimi.

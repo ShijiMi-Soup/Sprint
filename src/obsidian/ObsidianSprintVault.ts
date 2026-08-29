@@ -102,6 +102,6 @@ export class ObsidianSprintVault implements SprintVault {
     frontmatter: Record<string, unknown>,
     body: string,
   ): Promise<void> {
-    await this.app.vault.modify(file, `${serializeFrontmatter(frontmatter)}${body}`);
+    await this.app.vault.process(file, () => `${serializeFrontmatter(frontmatter)}${body}`);
   }
 }

@@ -144,7 +144,7 @@ export class SprintManager {
   private async syncProfile(settings: ResolvedSprintProfile): Promise<SprintSyncResult> {
     const root = normalizeFolder(settings.rootFolder);
     if (!root) {
-      throw new Error('Set a sprint profile root folder before enabling automatic sprints.');
+      throw new Error('Set the Sprint workspace folder before enabling automatic sprints.');
     }
 
     const durationWeeks = Math.min(8, Math.max(1, Math.round(settings.durationWeeks)));

@@ -37,20 +37,53 @@
 }
 
 .sprint-bases-project-header {
-  align-items: baseline;
-  display: flex;
+  align-items: center;
+  cursor: pointer;
+  display: grid;
   gap: var(--size-4-2);
+  grid-template-columns: auto minmax(0, max-content) auto 1fr auto;
+  list-style-position: outside;
   margin-bottom: var(--size-4-2);
 }
 
-.sprint-bases-project-header h4,
+.sprint-bases-project-title,
 .sprint-bases-group h5 {
+  font-size: var(--h4-size);
+  font-weight: var(--h4-weight);
   margin: 0;
 }
 
 .sprint-bases-project-count {
   color: var(--text-muted);
   font-size: var(--font-ui-small);
+}
+
+.sprint-bases-project-visibility {
+  grid-column: 5;
+}
+
+.sprint-bases-hidden-projects {
+  background: color-mix(in srgb, var(--background-secondary) 45%, transparent);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 6px;
+  padding: var(--size-4-2) var(--size-4-3);
+}
+
+.sprint-bases-hidden-header {
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: var(--font-ui-small);
+  font-weight: var(--font-semibold);
+}
+
+.sprint-bases-hidden-content {
+  display: grid;
+  gap: var(--size-4-5);
+  padding-top: var(--size-4-4);
+}
+
+.sprint-bases-hidden-content .sprint-bases-project:last-child {
+  padding-bottom: 0;
 }
 
 .sprint-bases-project-board {
@@ -136,6 +169,132 @@
   padding: var(--size-4-2);
 }
 
+.sprint-bases-view button.sprint-bases-new-task {
+  align-items: center;
+  background: transparent;
+  border: 1px dashed var(--background-modifier-border);
+  color: var(--text-muted);
+  display: flex;
+  gap: var(--size-2-2);
+  justify-content: flex-start;
+  padding: var(--size-4-2);
+  width: 100%;
+}
+
+.sprint-bases-view button.sprint-bases-new-task:hover {
+  background: var(--background-modifier-hover);
+  color: var(--text-normal);
+}
+
+.sprint-bases-new-task-icon,
+.sprint-bases-new-task-field-icon {
+  align-items: center;
+  display: inline-flex;
+  flex: 0 0 auto;
+}
+
+.sprint-bases-new-task-icon svg,
+.sprint-bases-new-task-field-icon svg {
+  height: 16px;
+  width: 16px;
+}
+
+.sprint-bases-new-task-form {
+  background: var(--background-primary-alt);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 6px;
+  display: grid;
+  gap: var(--size-4-2);
+  padding: var(--size-4-2);
+}
+
+.sprint-bases-new-task-form[hidden] {
+  display: none;
+}
+
+.sprint-bases-new-task-form input {
+  min-width: 0;
+  width: 100%;
+}
+
+.sprint-bases-new-task-name {
+  font-weight: var(--font-medium);
+}
+
+.sprint-bases-new-task-field {
+  align-items: center;
+  display: grid;
+  gap: var(--size-4-2);
+  grid-template-columns: auto minmax(0, 1fr);
+}
+
+.sprint-bases-new-task-field-icon {
+  color: var(--text-muted);
+}
+
+.sprint-bases-new-task-actions {
+  display: flex;
+  gap: var(--size-4-2);
+  justify-content: flex-end;
+}
+
+.sprint-overview-group h4 {
+  margin: 0 0 var(--size-4-2);
+}
+
+.sprint-overview-cards {
+  display: grid;
+  gap: var(--size-4-3);
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.sprint-overview-card {
+  background: var(--background-secondary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 8px;
+  display: grid;
+  gap: var(--size-4-2);
+  padding: var(--size-4-3);
+}
+
+.sprint-overview-card button.sprint-overview-title {
+  background: transparent;
+  border: 0;
+  color: var(--text-normal);
+  font-size: var(--font-ui-medium);
+  font-weight: var(--font-semibold);
+  height: auto;
+  justify-content: flex-start;
+  padding: 0;
+  text-align: left;
+}
+
+.sprint-overview-card button.sprint-overview-title:hover {
+  color: var(--text-accent);
+}
+
+.sprint-overview-dates,
+.sprint-overview-notes {
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+}
+
+.sprint-overview-metrics,
+.sprint-overview-notes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--size-4-2) var(--size-4-3);
+}
+
+.sprint-overview-metrics {
+  font-size: var(--font-ui-small);
+  font-weight: var(--font-medium);
+}
+
+.sprint-overview-notes .is-complete {
+  color: var(--color-green);
+}
+
 .sprint-bases-view .sprint-bases-entry-title,
 .sprint-bases-view .sprint-bases-entry-meta {
   display: block;
@@ -155,6 +314,15 @@
 .sprint-bases-view .sprint-bases-entry-points {
   border: 1px solid transparent;
   border-radius: 4px;
+  line-height: 1.4;
+  padding: 1px var(--size-4-2);
+}
+
+.sprint-bases-view .sprint-bases-entry-property {
+  background: color-mix(in srgb, var(--text-muted) 9%, transparent);
+  border: 1px solid color-mix(in srgb, var(--text-muted) 20%, transparent);
+  border-radius: 4px;
+  color: var(--text-muted);
   line-height: 1.4;
   padding: 1px var(--size-4-2);
 }

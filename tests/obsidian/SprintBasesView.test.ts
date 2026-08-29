@@ -1,9 +1,11 @@
 import { normalizeSprintSettings } from '@/domain/SprintSettings';
 import {
   applyTaskBoardState,
+  applyNewTaskFrontmatter,
   createSprintBasesViewRegistration,
   createSprintVelocityViewRegistration,
   getEstimateTone,
+  getEditableTaskProperties,
   getSprintBasesOptions,
   getTaskProjectGroup,
   selectRecentVelocityPoints,
@@ -17,6 +19,20 @@ describe('SprintBasesView', () => {
       expect.objectContaining({ key: 'sprintProfile', type: 'dropdown' }),
       expect.objectContaining({ key: 'layout', type: 'dropdown' }),
       expect.objectContaining({ key: 'showCompleted', type: 'toggle' }),
+      expect.objectContaining({
+        type: 'group',
+        displayName: 'Task cards',
+        items: expect.arrayContaining([
+          expect.objectContaining({ key: 'cardProperty1', type: 'property' }),
+        ]),
+      }),
+      expect.objectContaining({
+        type: 'group',
+        displayName: 'New task form',
+        items: expect.arrayContaining([
+          expect.objectContaining({ key: 'newTaskProperty1', type: 'property' }),
+        ]),
+      }),
     ]));
     expect(getSprintBasesOptions(settings)).toEqual(expect.arrayContaining([
       expect.objectContaining({
@@ -24,6 +40,34 @@ describe('SprintBasesView', () => {
         options: expect.objectContaining({ kanban: 'Kanban' }),
       }),
     ]));
+  });
+
+  it('normalizes the properties shown in the new-task composer', () => {
+    expect(getEditableTaskProperties(['note.estimate', 'due', 'estimate', 'project']))
+      .toEqual(['estimate', 'due']);
+    expect(getEditableTaskProperties(undefined)).toEqual(['estimate']);
+  });
+
+  it('applies Kanban context and editable values to a new task', () => {
+    const frontmatter: Record<string, unknown> = {};
+
+    applyNewTaskFrontmatter(
+      frontmatter,
+      'In progress',
+      'Agile PM/Projects/Research',
+      'Agile PM/Sprints/Sprint 2',
+      { estimate: 3, due: '2026-09-04' },
+    );
+
+    expect(frontmatter).toEqual({
+      'in progress': true,
+      'is done': false,
+      archived: false,
+      project: ['[[Agile PM/Projects/Research]]'],
+      sprint: ['[[Agile PM/Sprints/Sprint 2]]'],
+      estimate: 3,
+      due: '2026-09-04',
+    });
   });
 
   it('creates dedicated child containers for embedded custom views', () => {

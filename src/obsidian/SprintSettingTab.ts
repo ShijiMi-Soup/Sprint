@@ -8,16 +8,9 @@ import type {
   SprintSettings,
 } from '../domain/types';
 import type { SprintFeatureApi } from '../SprintFeature';
+import { sprintSkillContent } from './SprintBaseGenerator';
 
 const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-
-function defaultBasePath(rootFolder: string, filename: string): string {
-  return rootFolder ? `${rootFolder}/Bases/${filename}` : '';
-}
-
-function shouldMoveDefaultBasePath(path: string, previousRoot: string, filename: string): boolean {
-  return !path || path === defaultBasePath(previousRoot, filename) || path.endsWith(`/Bases/${filename}`);
-}
 
 class EnableAutomaticSprintsModal extends Modal {
   constructor(
@@ -32,10 +25,10 @@ class EnableAutomaticSprintsModal extends Modal {
     this.titleEl.setText('Turn on automatic sprints?');
     this.contentEl.empty();
     this.contentEl.createEl('p', {
-      text: 'Sprint will create missing Tasks, Sprints, and Projects Base files, current and future sprint notes, an Agile PM dashboard note, and local AI instruction files for tools such as Codex and Claude Code.',
+      text: 'Sprint will create missing Tasks, Sprints, and Projects Base files, current and future sprint notes, a Sprint Summary note, local AI instruction files, and vault-root skills for Codex and Claude Code.',
     });
     this.contentEl.createEl('p', {
-      text: 'Existing Base files are not overwritten.',
+      text: 'Existing Base files are upgraded in place while custom views and properties are preserved.',
     });
 
     new Setting(this.contentEl)
@@ -71,10 +64,10 @@ class ResetSprintProfileModal extends Modal {
   }
 
   override onOpen(): void {
-    this.titleEl.setText(`Reset ${this.profile.rootFolder || this.profile.name}?`);
+    this.titleEl.setText(`Reset ${this.profile.rootFolder || 'Sprint workspace'}?`);
     this.contentEl.empty();
     this.contentEl.createEl('p', {
-      text: `This permanently deletes ${this.profile.rootFolder || 'this sprint profile folder'} and regenerates the default Sprint folder, Base files, dashboard, AI instruction files, and sprint notes.`,
+      text: `This permanently deletes ${this.profile.rootFolder || 'this Sprint workspace folder'} and regenerates the configured Sprint folder, Base files, summary, AI instruction files, and sprint notes.`,
     });
     this.contentEl.createEl('p', {
       text: 'To continue, type exactly: Yes, delete.',
@@ -113,6 +106,76 @@ class ResetSprintProfileModal extends Modal {
   }
 }
 
+class SprintSkillEditorModal extends Modal {
+  private customInstructions: string;
+  private previewEl: HTMLTextAreaElement | null = null;
+
+  constructor(
+    app: App,
+    private readonly settings: SprintSettings,
+    private readonly onSave: (instructions: string) => void,
+  ) {
+    super(app);
+    this.customInstructions = settings.skillCustomInstructions['sprint-vault'] ?? '';
+  }
+
+  override onOpen(): void {
+    this.titleEl.setText('Sprint vault skill');
+    this.contentEl.empty();
+    this.contentEl.createEl('p', {
+      text: 'Sprint installs this skill at .agents/skills and .claude/skills in the vault root. The generated core stays current; additions entered here are appended to both copies.',
+    });
+
+    new Setting(this.contentEl)
+      .setName('Generated skill preview')
+      .addTextArea((textarea) => {
+        this.previewEl = textarea.inputEl;
+        textarea.inputEl.readOnly = true;
+        textarea.inputEl.rows = 14;
+        textarea.inputEl.style.width = '100%';
+        this.updatePreview();
+      });
+
+    new Setting(this.contentEl)
+      .setName('Vault-specific instructions')
+      .setDesc('Optional instructions appended to the generated Sprint workflow.')
+      .addTextArea((textarea) => {
+        textarea.setValue(this.customInstructions);
+        textarea.inputEl.rows = 8;
+        textarea.inputEl.style.width = '100%';
+        textarea.onChange((value) => {
+          this.customInstructions = value;
+          this.updatePreview();
+        });
+      });
+
+    new Setting(this.contentEl)
+      .addButton((button) => button
+        .setButtonText('Cancel')
+        .onClick(() => { this.close(); }))
+      .addButton((button) => button
+        .setButtonText('Save skill')
+        .setCta()
+        .onClick(() => {
+          this.onSave(this.customInstructions.trim());
+          this.close();
+        }));
+  }
+
+  override onClose(): void {
+    this.contentEl.empty();
+  }
+
+  private updatePreview(): void {
+    if (!this.previewEl) return;
+    this.previewEl.value = sprintSkillContent(
+      this.settings,
+      this.settings.profiles,
+      this.customInstructions,
+    );
+  }
+}
+
 export class SprintSettingTab extends PluginSettingTab {
   constructor(
     app: App,
@@ -125,7 +188,6 @@ export class SprintSettingTab extends PluginSettingTab {
   override display(): void {
     const { containerEl } = this;
     containerEl.empty();
-    containerEl.createEl('h1', { text: 'Sprint' });
 
     new Setting(containerEl)
       .setName('Automatic sprints')
@@ -159,10 +221,12 @@ export class SprintSettingTab extends PluginSettingTab {
 
     new Setting(containerEl)
       .setName('Generate Bases')
-      .setDesc('Create missing Base files, dashboard notes, and local AI instruction files for enabled profiles.')
+      .setDesc('Create missing Base files, dashboard notes, local AI instructions, and shared vault-root skills.')
       .addButton((button) => button
         .setButtonText('Generate Bases')
         .onClick(() => { void this.generateBases(); }));
+
+    this.renderAiSkills(containerEl);
 
     new Setting(containerEl)
       .setName('Vault-root AI instructions')
@@ -174,6 +238,26 @@ export class SprintSettingTab extends PluginSettingTab {
             settings.generateVaultRootInstructions = enabled;
           });
           await this.generateBases();
+        }));
+  }
+
+  private renderAiSkills(container: HTMLElement): void {
+    new Setting(container)
+      .setName('AI skills')
+      .setDesc('Manage Sprint workflows shared by supported AI tools.')
+      .setHeading();
+
+    new Setting(container)
+      .setName('Sprint vault')
+      .setDesc('Installed in the vault-root .agents and .claude skill folders. Existing folders and unmanaged skills are preserved.')
+      .addButton((button) => button
+        .setButtonText('View and edit')
+        .onClick(() => {
+          new SprintSkillEditorModal(
+            this.app,
+            structuredClone(this.feature.settings),
+            (instructions) => { void this.saveSkillInstructions('sprint-vault', instructions); },
+          ).open();
         }));
   }
 
@@ -226,29 +310,12 @@ export class SprintSettingTab extends PluginSettingTab {
 
   private renderProfiles(container: HTMLElement): void {
     new Setting(container)
-      .setName('Sprint profiles')
-      .setDesc('A profile owns the cadence shared by its Tasks and Sprints Bases.')
-      .setHeading()
-      .addButton((button) => button.setButtonText('Add profile').onClick(async () => {
-        await this.mutateSettings((settings) => {
-          settings.profiles.push({
-            id: `sprint-${Date.now()}`,
-            name: 'New sprint profile',
-            enabled: true,
-            rootFolder: '',
-            tasksBasePath: '',
-            sprintsBasePath: '',
-            projectsBasePath: '',
-            anchorDate: '',
-            overrides: {},
-          });
-        });
-        this.display();
-      }));
+      .setName('Sprint workspace')
+      .setDesc('The folder, Bases, and cadence managed by Sprint.')
+      .setHeading();
 
-    for (const profile of this.feature.settings.profiles) {
-      this.renderProfile(container, profile);
-    }
+    const profile = this.feature.settings.profiles[0];
+    if (profile) this.renderProfile(container, profile);
   }
 
   private renderProfile(container: HTMLElement, profile: SprintProfile): void {
@@ -260,65 +327,50 @@ export class SprintSettingTab extends PluginSettingTab {
     );
 
     new Setting(container)
-      .setName(profile.name || 'Sprint profile')
+      .setName(profile.name || 'Sprint workspace')
       .setHeading()
-      .addToggle((toggle) => toggle.setValue(profile.enabled).onChange((enabled) => (
-        mutate((target) => { target.enabled = enabled; })
-      )))
       .addExtraButton((button) => button
         .setIcon('rotate-ccw')
-        .setTooltip('Reset sprint profile folder')
+        .setTooltip('Reset Sprint workspace')
         .onClick(() => {
           new ResetSprintProfileModal(
             this.app,
             profile,
             () => { void this.resetProfile(profile.id); },
           ).open();
-        }))
-      .addExtraButton((button) => button
-        .setIcon('trash-2')
-        .setTooltip('Remove sprint profile')
-        .onClick(async () => {
-          await this.mutateSettings((settings) => {
-            settings.profiles = settings.profiles.filter(({ id }) => id !== profile.id);
-          });
-          this.display();
         }));
 
-    new Setting(container).setName('Profile name').addText((text) => text
+    new Setting(container)
+      .setName('Workspace name')
+      .setDesc('A display label for this Sprint workspace. Changing it does not rename vault files.')
+      .addText((text) => text
       .setValue(profile.name)
       .onChange((value) => mutate((target) => { target.name = value.trim(); })));
 
-    new Setting(container).setName('Project folder').addText((text) => text
-      .setPlaceholder('Agile project')
-      .setValue(profile.rootFolder)
-      .onChange((value) => mutate((target) => {
-        const previousRoot = target.rootFolder;
-        const nextRoot = value.trim();
-        if (shouldMoveDefaultBasePath(target.tasksBasePath, previousRoot, 'Tasks.base')) {
-          target.tasksBasePath = defaultBasePath(nextRoot, 'Tasks.base');
-        }
-        if (shouldMoveDefaultBasePath(target.sprintsBasePath, previousRoot, 'Sprints.base')) {
-          target.sprintsBasePath = defaultBasePath(nextRoot, 'Sprints.base');
-        }
-        if (shouldMoveDefaultBasePath(target.projectsBasePath, previousRoot, 'Projects.base')) {
-          target.projectsBasePath = defaultBasePath(nextRoot, 'Projects.base');
-        }
-        target.rootFolder = nextRoot;
-      })));
+    let folderDraft = profile.rootFolder;
+    new Setting(container)
+      .setName('Sprint folder')
+      .setDesc('The vault folder containing this profile. Rename moves the existing folder and updates its configured Base paths.')
+      .addText((text) => text
+        .setPlaceholder('Sprint')
+        .setValue(profile.rootFolder)
+        .onChange((value) => { folderDraft = value; }))
+      .addButton((button) => button
+        .setButtonText('Rename')
+        .onClick(() => { void this.renameProfileRoot(profile.id, folderDraft); }));
 
     new Setting(container).setName('Tasks base').addText((text) => text
-      .setPlaceholder('Agile PM/Bases/Tasks.base')
+      .setPlaceholder('Sprint/Tasks.base')
       .setValue(profile.tasksBasePath)
       .onChange((value) => mutate((target) => { target.tasksBasePath = value.trim(); })));
 
     new Setting(container).setName('Sprints base').addText((text) => text
-      .setPlaceholder('Agile PM/Bases/Sprints.base')
+      .setPlaceholder('Sprint/Sprints.base')
       .setValue(profile.sprintsBasePath)
       .onChange((value) => mutate((target) => { target.sprintsBasePath = value.trim(); })));
 
     new Setting(container).setName('Projects base').addText((text) => text
-      .setPlaceholder('Agile PM/Bases/Projects.base')
+      .setPlaceholder('Sprint/Projects.base')
       .setValue(profile.projectsBasePath)
       .onChange((value) => mutate((target) => { target.projectsBasePath = value.trim(); })));
 
@@ -391,6 +443,15 @@ export class SprintSettingTab extends PluginSettingTab {
     return this.feature.updateSettings(mutation);
   }
 
+  private async saveSkillInstructions(skill: string, instructions: string): Promise<void> {
+    await this.mutateSettings((settings) => {
+      if (instructions) settings.skillCustomInstructions[skill] = instructions;
+      else delete settings.skillCustomInstructions[skill];
+    });
+    await this.generateBases();
+    this.display();
+  }
+
   private async sync(): Promise<void> {
     if (!this.feature.settings.enabled) {
       new Notice('Enable automatic sprints before synchronizing.');
@@ -412,15 +473,26 @@ export class SprintSettingTab extends PluginSettingTab {
 
   private async resetProfile(profileId: string): Promise<void> {
     if (!this.feature.settings.enabled) {
-      new Notice('Enable automatic sprints before resetting a profile folder.');
+      new Notice('Enable automatic sprints before resetting the Sprint workspace.');
       return;
     }
     try {
       const result = await this.feature.resetProfile(profileId);
-      new Notice(`Sprint profile reset: ${result.created} sprints created.`);
+      new Notice(`Sprint workspace reset: ${result.created} sprints created.`);
       this.display();
     } catch (error) {
-      new Notice(error instanceof Error ? `Sprint profile reset failed: ${error.message}` : 'Sprint profile reset failed.');
+      new Notice(error instanceof Error ? `Sprint workspace reset failed: ${error.message}` : 'Sprint workspace reset failed.');
+    }
+  }
+
+  private async renameProfileRoot(profileId: string, rootFolder: string): Promise<void> {
+    try {
+      await this.feature.renameProfileRoot(profileId, rootFolder);
+      await this.feature.generateBases();
+      new Notice(`Sprint folder renamed to ${rootFolder.trim()}.`);
+      this.display();
+    } catch (error) {
+      new Notice(error instanceof Error ? `Sprint folder rename failed: ${error.message}` : 'Sprint folder rename failed.');
     }
   }
 

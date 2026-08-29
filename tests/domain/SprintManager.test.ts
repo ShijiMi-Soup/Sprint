@@ -55,7 +55,9 @@ class MemorySprintVault implements SprintVault {
 function settings(overrides: Partial<SprintSettings> = {}): SprintSettings {
   return {
     enabled: true,
+    supportSchemaVersion: 1,
     generateVaultRootInstructions: false,
+    skillCustomInstructions: {},
     defaults: {
       durationWeeks: 1,
       startDay: 1,
@@ -74,9 +76,9 @@ function profile(overrides: Partial<SprintProfile> = {}): SprintProfile {
     name: 'Agile PM',
     enabled: true,
     rootFolder: 'Agile PM',
-    tasksBasePath: 'Agile PM/Bases/Tasks.base',
-    sprintsBasePath: 'Agile PM/Bases/Sprints.base',
-    projectsBasePath: 'Agile PM/Bases/Projects.base',
+    tasksBasePath: 'Agile PM/Tasks.base',
+    sprintsBasePath: 'Agile PM/Sprints.base',
+    projectsBasePath: 'Agile PM/Projects.base',
     anchorDate: '2026-08-03',
     overrides: {},
     ...overrides,
@@ -227,8 +229,8 @@ describe('SprintManager', () => {
             id: 'personal',
             name: 'Personal',
             rootFolder: 'Personal',
-            tasksBasePath: 'Personal/Bases/Tasks.base',
-            sprintsBasePath: 'Personal/Bases/Sprints.base',
+            tasksBasePath: 'Personal/Tasks.base',
+            sprintsBasePath: 'Personal/Sprints.base',
             overrides: { durationWeeks: 2, namingFormat: 'Cycle {number}' },
           }),
         ],

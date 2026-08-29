@@ -1,6 +1,7 @@
 import { Notice, type Plugin } from 'obsidian';
 
 import { SprintManager, type SprintSyncResult } from './domain/SprintManager';
+import { CURRENT_SUPPORT_SCHEMA_VERSION } from './domain/SprintSettings';
 import type { SprintSettings } from './domain/types';
 import { SprintBaseGenerator, type SprintBaseGenerationResult } from './obsidian/SprintBaseGenerator';
 import {
@@ -21,6 +22,7 @@ export interface SprintFeatureApi {
   sync(): Promise<SprintSyncResult>;
   generateBases(): Promise<SprintBaseGenerationResult>;
   resetProfile(profileId: string): Promise<SprintSyncResult>;
+  renameProfileRoot(profileId: string, rootFolder: string): Promise<void>;
   updateSettings(mutation: (settings: SprintSettings) => void): Promise<void>;
 }
 
@@ -61,43 +63,134 @@ export class SprintFeature implements SprintFeatureApi {
       this.openSettings();
     });
     this.plugin.addCommand({
-      id: 'sync-sprints',
+      id: 'sync',
       name: 'Sync sprints',
       callback: () => { void this.syncWithNotice(); },
     });
     this.plugin.addCommand({
-      id: 'generate-sprint-bases',
+      id: 'generate-bases',
       name: 'Generate sprint Bases',
       callback: () => { void this.generateBasesWithNotice(); },
     });
     this.plugin.addCommand({
-      id: 'diagnose-sprint-generation',
-      name: 'Diagnose sprint generation',
-      callback: () => { void this.diagnoseSprintGeneration(); },
+      id: 'open-sprint-summary',
+      name: 'Open Sprint Summary',
+      callback: () => { void this.openAgilePm(); },
     });
     this.scheduleSync();
   }
 
   async sync(): Promise<SprintSyncResult> {
     const warnings: string[] = [];
-    await this.runOptionalSyncPhase('Initial support-file generation', () => this.generateBases(), warnings);
+    if (this.needsSupportMigration()) {
+      await this.runOptionalSyncPhase('Support-file migration', () => this.generateBases(), warnings);
+    }
 
     // Sprint notes are the core operation. Optional Bases, AI instructions, or
     // property metadata must never prevent these notes from being synchronized.
     const result = await this.manager.sync();
 
-    await this.runOptionalSyncPhase('Dashboard refresh', () => this.generateBases(), warnings);
     this.lastSyncWarnings = warnings;
     return result;
   }
 
-  generateBases(): Promise<SprintBaseGenerationResult> {
-    return this.baseGenerator.generate(this.currentSettings);
+  async generateBases(): Promise<SprintBaseGenerationResult> {
+    const result = await this.baseGenerator.generate(this.currentSettings);
+    if (
+      this.currentSettings.supportSchemaVersion < CURRENT_SUPPORT_SCHEMA_VERSION
+      || this.currentSettings.profiles.some(({ samplesInitialized }) => samplesInitialized !== true)
+    ) {
+      await this.updateSettings((settings) => {
+        settings.supportSchemaVersion = CURRENT_SUPPORT_SCHEMA_VERSION;
+        for (const profile of settings.profiles) profile.samplesInitialized = true;
+      });
+    }
+    return result;
   }
 
-  resetProfile(profileId: string): Promise<SprintSyncResult> {
-    return this.baseGenerator.resetProfileRoot(this.currentSettings, profileId)
-      .then(() => this.sync());
+  private needsSupportMigration(): boolean {
+    return this.currentSettings.supportSchemaVersion < CURRENT_SUPPORT_SCHEMA_VERSION
+      || this.currentSettings.profiles.some(({ samplesInitialized }) => samplesInitialized !== true);
+  }
+
+  async resetProfile(profileId: string): Promise<SprintSyncResult> {
+    await this.baseGenerator.resetProfileRoot(this.currentSettings, profileId);
+    await this.updateSettings((settings) => {
+      const profile = settings.profiles.find((candidate) => candidate.id === profileId);
+      if (profile) profile.samplesInitialized = false;
+    });
+    return this.sync();
+  }
+
+  renameProfileRoot(profileId: string, rootFolder: string): Promise<void> {
+    const run = async (): Promise<void> => {
+      const nextRoot = rootFolder.trim().replace(/^\/+|\/+$/g, '');
+      if (!nextRoot) throw new Error('Enter a Sprint folder path.');
+      const next = structuredClone(this.currentSettings);
+      const profile = next.profiles.find(({ id }) => id === profileId);
+      if (!profile) throw new Error('Sprint workspace not found.');
+      const previousRoot = profile.rootFolder.trim().replace(/^\/+|\/+$/g, '');
+      if (previousRoot === nextRoot) return;
+
+      const rewritePath = (path: string): string => {
+        if (!path) return '';
+        if (!previousRoot) return path;
+        if (path === previousRoot) return nextRoot;
+        return path.startsWith(`${previousRoot}/`)
+          ? `${nextRoot}${path.slice(previousRoot.length)}`
+          : path;
+      };
+      const existing = previousRoot
+        ? this.plugin.app.vault.getAbstractFileByPath(previousRoot)
+        : null;
+      if (previousRoot && !existing) {
+        throw new Error(`Sprint folder not found: ${previousRoot}`);
+      }
+      if (this.plugin.app.vault.getAbstractFileByPath(nextRoot)) {
+        throw new Error(`A file or folder already exists at: ${nextRoot}`);
+      }
+
+      const previousTitle = previousRoot.split('/').at(-1) ?? '';
+      const legacyDashboardPath = previousRoot && previousTitle
+        ? `${previousRoot}/${previousTitle}.md`
+        : '';
+      const summaryPath = previousRoot ? `${previousRoot}/Sprint Summary.md` : '';
+      const legacyDashboard = legacyDashboardPath
+        ? this.plugin.app.vault.getFileByPath(legacyDashboardPath)
+        : null;
+      let dashboardRenamed = false;
+      if (legacyDashboard && !this.plugin.app.vault.getAbstractFileByPath(summaryPath)) {
+        await this.plugin.app.fileManager.renameFile(legacyDashboard, summaryPath);
+        dashboardRenamed = true;
+      }
+      try {
+        if (existing) await this.plugin.app.fileManager.renameFile(existing, nextRoot);
+      } catch (error) {
+        const summary = this.plugin.app.vault.getFileByPath(summaryPath);
+        if (dashboardRenamed && summary) {
+          await this.plugin.app.fileManager.renameFile(summary, legacyDashboardPath);
+        }
+        throw error;
+      }
+      profile.rootFolder = nextRoot;
+      profile.tasksBasePath = rewritePath(profile.tasksBasePath) || `${nextRoot}/Tasks.base`;
+      profile.sprintsBasePath = rewritePath(profile.sprintsBasePath) || `${nextRoot}/Sprints.base`;
+      profile.projectsBasePath = rewritePath(profile.projectsBasePath) || `${nextRoot}/Projects.base`;
+      try {
+        await this.store.save(next);
+        this.currentSettings = next;
+      } catch (error) {
+        const moved = this.plugin.app.vault.getAbstractFileByPath(nextRoot);
+        if (moved && previousRoot) await this.plugin.app.fileManager.renameFile(moved, previousRoot);
+        const summary = this.plugin.app.vault.getFileByPath(summaryPath);
+        if (dashboardRenamed && summary) {
+          await this.plugin.app.fileManager.renameFile(summary, legacyDashboardPath);
+        }
+        throw error;
+      }
+    };
+    this.mutationTail = this.mutationTail.then(run, run);
+    return this.mutationTail;
   }
 
   updateSettings(mutation: (settings: SprintSettings) => void): Promise<void> {
@@ -132,7 +225,7 @@ export class SprintFeature implements SprintFeatureApi {
     try {
       const result = await this.sync();
       const warning = this.lastSyncWarnings.length > 0
-        ? ` ${this.lastSyncWarnings.length} support-file warning(s); run Diagnose sprint generation for details.`
+        ? ` ${this.lastSyncWarnings.length} support-file warning(s); sprint notes were still synchronized.`
         : '';
       new Notice(`Sprints synchronized: ${result.created} created, ${result.movedTasks} tasks moved.${warning}`);
     } catch (error) {
@@ -149,68 +242,6 @@ export class SprintFeature implements SprintFeatureApi {
     }
   }
 
-  private async diagnoseSprintGeneration(): Promise<void> {
-    const enabledProfiles = this.currentSettings.profiles.filter((profile) => profile.enabled);
-    console.group('[Sprint] Sprint generation diagnostics');
-    console.info('[Sprint] Settings', {
-      enabled: this.currentSettings.enabled,
-      profileCount: enabledProfiles.length,
-      profiles: enabledProfiles.map((profile) => ({
-        id: profile.id,
-        name: profile.name,
-        rootFolder: profile.rootFolder,
-        tasksBasePath: profile.tasksBasePath,
-        sprintsBasePath: profile.sprintsBasePath,
-        projectsBasePath: profile.projectsBasePath,
-      })),
-    });
-
-    if (!this.currentSettings.enabled) {
-      console.error('[Sprint] Automatic sprints are disabled.');
-      console.groupEnd();
-      new Notice('Sprint diagnostics failed: Automatic sprints are disabled.');
-      return;
-    }
-    if (enabledProfiles.length === 0) {
-      console.error('[Sprint] No enabled sprint profiles were found.');
-      console.groupEnd();
-      new Notice('Sprint diagnostics failed: No enabled sprint profiles were found.');
-      return;
-    }
-
-    new Notice('Sprint diagnostics started. Detailed output is in the developer console.');
-    try {
-      console.info('[Sprint] Starting synchronization.');
-      const result = await this.sync();
-      const fileChecks = enabledProfiles.map((profile) => {
-        const root = profile.rootFolder.trim().replace(/^\/+|\/+$/g, '');
-        const folder = `${root}/Sprints`;
-        const sprintFiles = this.plugin.app.vault.getMarkdownFiles()
-          .filter((file) => file.path.startsWith(`${folder}/`))
-          .map((file) => file.path);
-        return { profile: profile.name || profile.id, folder, sprintFiles };
-      });
-      console.info('[Sprint] Synchronization result', result);
-      console.info('[Sprint] Sprint file checks', fileChecks);
-      if (this.lastSyncWarnings.length > 0) {
-        console.warn('[Sprint] Non-blocking support-file warnings', this.lastSyncWarnings);
-      }
-      console.groupEnd();
-
-      const fileCount = fileChecks.reduce((sum, check) => sum + check.sprintFiles.length, 0);
-      const warning = this.lastSyncWarnings.length > 0
-        ? ` ${this.lastSyncWarnings.length} support-file warning(s) logged.`
-        : '';
-      new Notice(`Sprint diagnostics complete: ${fileCount} sprint file(s) found, ${result.created} created.${warning}`);
-    } catch (error) {
-      console.error('[Sprint] Core sprint synchronization failed', error);
-      console.groupEnd();
-      new Notice(error instanceof Error
-        ? `Sprint diagnostics failed during sprint synchronization: ${error.message}`
-        : 'Sprint diagnostics failed during sprint synchronization.');
-    }
-  }
-
   private async runOptionalSyncPhase(
     phase: string,
     operation: () => Promise<unknown>,
@@ -224,6 +255,21 @@ export class SprintFeature implements SprintFeatureApi {
       warnings.push(warning);
       console.warn(`[Sprint] ${warning}`, error);
     }
+  }
+
+  private async openAgilePm(): Promise<void> {
+    const profile = this.currentSettings.profiles[0];
+    if (!profile?.rootFolder) {
+      new Notice('No Sprint folder is configured.');
+      return;
+    }
+    const root = profile.rootFolder.replace(/^\/+|\/+$/g, '');
+    const path = `${root}/Sprint Summary.md`;
+    if (!this.plugin.app.vault.getFileByPath(path)) {
+      new Notice(`Sprint Summary page not found: ${path}`);
+      return;
+    }
+    await this.plugin.app.workspace.openLinkText(path, '', false);
   }
 
   private openSettings(): void {
