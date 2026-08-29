@@ -66,9 +66,23 @@ After Sprint is accepted into the community directory:
 
 ### Manual Installation
 
-1. Download `main.js`, `manifest.json`, and `styles.css` from the latest GitHub release.
-2. Place the files in `<vault>/.obsidian/plugins/sprint/`.
-3. Reload Obsidian and enable Sprint under **Community plugins**.
+1. Open the [latest Sprint release](https://github.com/ShijiMi-Soup/Sprint/releases/latest).
+2. Under **Assets**, download `main.js`, `manifest.json`, and `styles.css`. Do not download the **Source code** archives; they are not installable plugin packages.
+3. In the target vault, create `.obsidian/plugins/sprint/` if it does not already exist. The `.obsidian` directory may be hidden by your operating system.
+4. Place the three downloaded files directly inside the `sprint` directory:
+
+   ```text
+   <vault>/
+   └── .obsidian/
+       └── plugins/
+           └── sprint/
+               ├── main.js
+               ├── manifest.json
+               └── styles.css
+   ```
+
+5. Restart Obsidian, or run **Reload app without saving** from the command palette.
+6. Open **Settings → Community plugins**, find Sprint under the installed plugins, and enable it. If Community plugins are disabled, turn off Restricted mode first.
 
 ## Getting Started
 

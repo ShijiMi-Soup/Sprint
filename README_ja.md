@@ -66,9 +66,23 @@ Sprintがコミュニティディレクトリに登録された後は、次の�
 
 ### 手動インストール
 
-1. 最新のGitHubリリースから`main.js`、`manifest.json`、`styles.css`をダウンロードします。
-2. ファイルを`<Vault>/.obsidian/plugins/sprint/`に配置します。
-3. Obsidianを再読み込みし、**コミュニティプラグイン**でSprintを有効にします。
+1. [Sprintの最新リリース](https://github.com/ShijiMi-Soup/Sprint/releases/latest)を開きます。
+2. **Assets**から`main.js`、`manifest.json`、`styles.css`をダウンロードします。**Source code**のアーカイブはインストール用パッケージではありません。
+3. 対象のVaultに`.obsidian/plugins/sprint/`を作成します。`.obsidian`はOS上で隠しフォルダになっている場合があります。
+4. ダウンロードした3つのファイルを`sprint`フォルダの直下に配置します。
+
+   ```text
+   <Vault>/
+   └── .obsidian/
+       └── plugins/
+           └── sprint/
+               ├── main.js
+               ├── manifest.json
+               └── styles.css
+   ```
+
+5. Obsidianを再起動するか、コマンドパレットから**Reload app without saving**を実行します。
+6. **設定 → コミュニティプラグイン**を開き、インストール済みプラグインからSprintを有効にします。コミュニティプラグインが無効の場合は、先に制限モードを解除してください。
 
 ## 初期設定
 
