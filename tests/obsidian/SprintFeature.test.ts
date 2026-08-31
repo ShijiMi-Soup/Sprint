@@ -99,7 +99,7 @@ describe('SprintFeature', () => {
     expect((host as unknown as { addCommand: jest.Mock }).addCommand)
       .toHaveBeenCalledWith(expect.objectContaining({ id: 'open-summary' }));
     expect((host as unknown as { addRibbonIcon: jest.Mock }).addRibbonIcon)
-      .toHaveBeenCalledWith('footprints', 'Open sprint settings', expect.any(Function));
+      .toHaveBeenCalledWith('check-check', 'Open sprint settings', expect.any(Function));
     const commands = (host as unknown as { addCommand: jest.Mock }).addCommand.mock.calls
       .map(([command]: [{ id: string; callback: () => Promise<void> }]) => command);
     await commands.find(({ id }) => id === 'open-summary')?.callback();

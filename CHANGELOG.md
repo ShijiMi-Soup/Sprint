@@ -12,7 +12,7 @@
 
 ### Changed
 
-- Changed the left ribbon shortcut from a calendar to a running-footprints icon.
+- Changed the left ribbon shortcut from a calendar to a double-check icon.
 
 ### Documentation
 
