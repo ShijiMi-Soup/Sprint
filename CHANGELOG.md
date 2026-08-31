@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.3 - 2026-08-31
+
+### Documentation
+
+- Added illustrated installation and first-time setup guides in English and Japanese.
+- Added concise Community plugin setup instructions and links to the complete guides in both READMEs.
+- Documented workspace creation, reinstall safety, manual installation, and common troubleshooting steps.
+
 ## 0.1.2 - 2026-08-31
 
 ### Fixed
