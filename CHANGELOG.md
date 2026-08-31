@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.1.2 - 2026-08-31
+
+### Fixed
+
+- Restored all controls in the Obsidian 1.13 settings tab by replacing unsupported
+  parent-group DOM injection with native declarative setting groups and rows.
+- Prevented plugin reinstalls from adding tutorial projects and tasks when the configured
+  Sprint workspace folder already exists, including existing empty workspaces.
+- Preserved first-install tutorial generation for genuinely new workspaces and explicit
+  destructive resets.
+- Added regression coverage for reinstalling over empty and populated Sprint folders.
+
+### Documentation
+
+- Documented a proposed solo-first Agile ceremony flow covering sprint planning, daily
+  check-ins, showcase-style reviews, mini-retrospectives, and sprint closing.
+- Defined provider-independent boundaries for future AI-assisted ceremony facilitation;
+  agents may prepare and propose changes, while the user remains the decision maker.
+- Recorded a future opt-in progress-reminder feature, including cross-platform in-app
+  reminders and the current limitations of scheduled mobile background notifications.
+
 ## 0.1.1 - 2026-08-31
 
 ### Changed

@@ -1,4 +1,10 @@
-import type { App, Plugin, SettingDefinitionItem } from 'obsidian';
+import type {
+  App,
+  ExtraButtonComponent,
+  Plugin,
+  SettingDefinition,
+  SettingDefinitionItem,
+} from 'obsidian';
 import { Modal, Notice, PluginSettingTab, Setting } from 'obsidian';
 
 import { getLocalDate, getWeekStart } from '../domain/SprintSchedule';
@@ -186,38 +192,65 @@ export class SprintSettingTab extends PluginSettingTab {
   }
 
   override getSettingDefinitions(): SettingDefinitionItem[] {
+    const profile = this.feature.settings.profiles[0];
     return [
-      this.sectionDefinition(
+      this.renderDefinition(
         'Automatic sprints',
         ['enable', 'cadence', 'rollover'],
-        (container) => { this.renderAutomaticSprints(container); },
+        (setting) => { this.configureAutomaticSprints(setting); },
       ),
-      this.sectionDefinition(
-        'Global defaults',
-        ['duration', 'start day', 'incomplete tasks', 'future sprints', 'naming'],
-        (container) => { this.renderDefaults(container); },
-      ),
-      this.sectionDefinition(
-        'Workspace',
-        ['folder', 'Tasks base', 'Sprints base', 'Projects base', 'cadence anchor'],
-        (container) => { this.renderProfiles(container); },
-      ),
-      this.sectionDefinition(
-        'Maintenance',
-        ['synchronize', 'generate Bases'],
-        (container) => { this.renderMaintenance(container); },
-      ),
-      this.sectionDefinition(
-        'AI skills',
-        ['Codex', 'Claude Code', 'instructions'],
-        (container) => { this.renderAiSettings(container); },
-      ),
+      {
+        type: 'group',
+        heading: 'Global defaults',
+        items: this.defaultDefinitions(),
+      },
+      {
+        type: 'group',
+        heading: 'Workspace',
+        extraButtons: profile ? [
+          (button: ExtraButtonComponent): void => {
+            button.setIcon('rotate-ccw')
+              .setTooltip('Reset sprint workspace')
+              .onClick(() => {
+              new ResetSprintProfileModal(
+                this.app,
+                profile,
+                () => { void this.resetProfile(profile.id); },
+              ).open();
+              });
+          },
+        ] : undefined,
+        items: profile ? this.profileDefinitions(profile) : [],
+      },
+      {
+        type: 'group',
+        heading: 'Maintenance',
+        items: this.maintenanceDefinitions(),
+      },
+      {
+        type: 'group',
+        heading: 'AI skills',
+        items: this.aiDefinitions(),
+      },
     ];
   }
 
-  private renderAutomaticSprints(containerEl: HTMLElement): void {
-    new Setting(containerEl)
-      .setName('Automatic sprints')
+  private renderDefinition(
+    name: string,
+    aliases: string[],
+    render: (setting: Setting) => void,
+    desc?: string,
+  ): SettingDefinition {
+    return {
+      name,
+      aliases,
+      desc,
+      render: (setting): void => { render(setting); },
+    };
+  }
+
+  private configureAutomaticSprints(setting: Setting): void {
+    setting
       .setDesc('Generate missing base files and sprint notes, then roll incomplete tasks on the configured cadence.')
       .addToggle((toggle) => toggle
         .setValue(this.feature.settings.enabled)
@@ -236,130 +269,62 @@ export class SprintSettingTab extends PluginSettingTab {
         }));
   }
 
-  private renderMaintenance(containerEl: HTMLElement): void {
-    new Setting(containerEl)
-      .setName('Synchronize now')
-      .setDesc('Create missing sprint notes, update lifecycle statuses, and apply rollover rules.')
-      .addButton((button) => button
-        .setButtonText('Sync sprints')
-        .setCta()
-        .onClick(() => { void this.sync(); }));
-
-    new Setting(containerEl)
-      .setName('Generate bases')
-      .setDesc('Create missing base files, dashboard notes, local AI instructions, and shared vault-root skills.')
-      .addButton((button) => button
-        .setButtonText('Generate bases')
-        .onClick(() => { void this.generateBases(); }));
-  }
-
-  private renderAiSettings(containerEl: HTMLElement): void {
-    this.renderAiSkills(containerEl);
-
-    new Setting(containerEl)
-      .setName('Vault-root AI instructions')
-      .setDesc('Also generate Sprint-managed AGENTS.md and CLAUDE.md files at the Obsidian vault root. Existing instruction files are never overwritten.')
-      .addToggle((toggle) => toggle
-        .setValue(this.feature.settings.generateVaultRootInstructions)
-        .onChange(async (enabled) => {
-          await this.mutateSettings((settings) => {
-            settings.generateVaultRootInstructions = enabled;
-          });
-          await this.generateBases();
-        }));
-  }
-
-  private sectionDefinition(
-    name: string,
-    aliases: string[],
-    render: (container: HTMLElement) => void,
-  ): SettingDefinitionItem {
-    return {
-      name,
-      aliases,
-      render: (setting, group): void => {
-        setting.settingEl.remove();
-        render(group.listEl);
-      },
-    };
-  }
-
-  private renderAiSkills(container: HTMLElement): void {
-    new Setting(container)
-      .setName('AI skills')
-      .setDesc('Manage sprint workflows shared by supported AI tools.')
-      .setHeading();
-
-    new Setting(container)
-      .setName('Sprint vault')
-      .setDesc('Installed in the vault-root .agents and .claude skill folders. Existing folders and unmanaged skills are preserved.')
-      .addButton((button) => button
-        .setButtonText('View and edit')
-        .onClick(() => {
-          new SprintSkillEditorModal(
-            this.app,
-            structuredClone(this.feature.settings),
-            (instructions) => { void this.saveSkillInstructions('sprint-vault', instructions); },
-          ).open();
-        }));
-  }
-
-  private renderDefaults(container: HTMLElement): void {
+  private defaultDefinitions(): SettingDefinition[] {
     const defaults = this.feature.settings.defaults;
-    new Setting(container).setName('Global defaults').setHeading();
-
-    new Setting(container).setName('Sprint duration').addSlider((slider) => slider
-      .setLimits(1, 8, 1)
-      .setValue(defaults.durationWeeks)
-      .onChange((value) => this.mutateSettings((settings) => {
-        settings.defaults.durationWeeks = value;
-      })));
-
-    new Setting(container).setName('Start day').addDropdown((dropdown) => {
-      for (const [index, day] of DAYS.entries()) dropdown.addOption(String(index), day);
-      dropdown.setValue(String(defaults.startDay)).onChange((value) => this.mutateSettings((settings) => {
-        settings.defaults.startDay = Number(value);
-      }));
-    });
-
-    new Setting(container).setName('Incomplete tasks').addDropdown((dropdown) => dropdown
-      .addOption('next', 'Move to current sprint')
-      .addOption('backlog', 'Move to backlog')
-      .addOption('keep', 'Keep in original sprint')
-      .setValue(defaults.incompleteTaskPolicy)
-      .onChange((value) => this.mutateSettings((settings) => {
-        settings.defaults.incompleteTaskPolicy = value as IncompleteTaskPolicy;
-      })));
-
-    new Setting(container).setName('Future sprints').addSlider((slider) => slider
-      .setLimits(1, 8, 1)
-      .setValue(defaults.futureSprintCount)
-      .onChange((value) => this.mutateSettings((settings) => {
-        settings.defaults.futureSprintCount = value;
-      })));
-
-    new Setting(container)
-      .setName('Sprint naming')
-      .setDesc('Use {number} where the sequential sprint number should appear.')
-      .addText((text) => text
-        .setPlaceholder('Sprint {number}')
-        .setValue(defaults.namingFormat)
-        .onChange((value) => this.mutateSettings((settings) => {
-          settings.defaults.namingFormat = value.trim() || 'Sprint {number}';
-        })));
+    return [
+      this.renderDefinition('Sprint duration', ['duration', 'weeks'], (setting) => {
+        setting.addSlider((slider) => slider
+          .setLimits(1, 8, 1)
+          .setValue(defaults.durationWeeks)
+          .onChange((value) => this.mutateSettings((settings) => {
+            settings.defaults.durationWeeks = value;
+          })));
+      }),
+      this.renderDefinition('Start day', ['cadence', 'week'], (setting) => {
+        setting.addDropdown((dropdown) => {
+          for (const [index, day] of DAYS.entries()) dropdown.addOption(String(index), day);
+          dropdown.setValue(String(defaults.startDay)).onChange((value) => (
+            this.mutateSettings((settings) => {
+              settings.defaults.startDay = Number(value);
+            })
+          ));
+        });
+      }),
+      this.renderDefinition('Incomplete tasks', ['rollover', 'unfinished'], (setting) => {
+        setting.addDropdown((dropdown) => dropdown
+          .addOption('next', 'Move to current sprint')
+          .addOption('backlog', 'Move to backlog')
+          .addOption('keep', 'Keep in original sprint')
+          .setValue(defaults.incompleteTaskPolicy)
+          .onChange((value) => this.mutateSettings((settings) => {
+            settings.defaults.incompleteTaskPolicy = value as IncompleteTaskPolicy;
+          })));
+      }),
+      this.renderDefinition('Future sprints', ['future', 'count'], (setting) => {
+        setting.addSlider((slider) => slider
+          .setLimits(1, 8, 1)
+          .setValue(defaults.futureSprintCount)
+          .onChange((value) => this.mutateSettings((settings) => {
+            settings.defaults.futureSprintCount = value;
+          })));
+      }),
+      this.renderDefinition(
+        'Sprint naming',
+        ['name', 'number'],
+        (setting) => {
+          setting.addText((text) => text
+            .setPlaceholder('Sprint {number}')
+            .setValue(defaults.namingFormat)
+            .onChange((value) => this.mutateSettings((settings) => {
+              settings.defaults.namingFormat = value.trim() || 'Sprint {number}';
+            })));
+        },
+        'Use {number} where the sequential sprint number should appear.',
+      ),
+    ];
   }
 
-  private renderProfiles(container: HTMLElement): void {
-    new Setting(container)
-      .setName('Workspace')
-      .setDesc('The folder, bases, and cadence managed by this plugin.')
-      .setHeading();
-
-    const profile = this.feature.settings.profiles[0];
-    if (profile) this.renderProfile(container, profile);
-  }
-
-  private renderProfile(container: HTMLElement, profile: SprintProfile): void {
+  private profileDefinitions(profile: SprintProfile): SettingDefinition[] {
     const mutate = (mutation: (profile: SprintProfile) => void): Promise<void> => (
       this.mutateSettings((settings) => {
         const target = settings.profiles.find(({ id }) => id === profile.id);
@@ -367,117 +332,184 @@ export class SprintSettingTab extends PluginSettingTab {
       })
     );
 
-    new Setting(container)
-      .setName(profile.name || 'Sprint workspace')
-      .setHeading()
-      .addExtraButton((button) => button
-        .setIcon('rotate-ccw')
-        .setTooltip('Reset sprint workspace')
-        .onClick(() => {
-          new ResetSprintProfileModal(
-            this.app,
-            profile,
-            () => { void this.resetProfile(profile.id); },
-          ).open();
-        }));
-
-    new Setting(container)
-      .setName('Workspace name')
-      .setDesc('A display label for this sprint workspace. Changing it does not rename vault files.')
-      .addText((text) => text
-      .setValue(profile.name)
-      .onChange((value) => mutate((target) => { target.name = value.trim(); })));
-
     let folderDraft = profile.rootFolder;
-    new Setting(container)
-      .setName('Sprint folder')
-      .setDesc('The vault folder containing this profile. Rename moves the existing folder and updates its configured base paths.')
-      .addText((text) => text
-        .setPlaceholder('Sprint')
-        .setValue(profile.rootFolder)
-        .onChange((value) => { folderDraft = value; }))
-      .addButton((button) => button
-        .setButtonText('Rename')
-        .onClick(() => { void this.renameProfileRoot(profile.id, folderDraft); }));
-
-    new Setting(container).setName('Tasks base').addText((text) => text
-      .setPlaceholder('Sprint/Tasks.base')
-      .setValue(profile.tasksBasePath)
-      .onChange((value) => mutate((target) => { target.tasksBasePath = value.trim(); })));
-
-    new Setting(container).setName('Sprints base').addText((text) => text
-      .setPlaceholder('Sprint/Sprints.base')
-      .setValue(profile.sprintsBasePath)
-      .onChange((value) => mutate((target) => { target.sprintsBasePath = value.trim(); })));
-
-    new Setting(container).setName('Projects base').addText((text) => text
-      .setPlaceholder('Sprint/Projects.base')
-      .setValue(profile.projectsBasePath)
-      .onChange((value) => mutate((target) => { target.projectsBasePath = value.trim(); })));
-
     const startDay = profile.overrides.startDay ?? this.feature.settings.defaults.startDay;
-    new Setting(container).setName('Cadence anchor').addText((text) => text
-      .setPlaceholder(getWeekStart(getLocalDate(), startDay))
-      .setValue(profile.anchorDate)
-      .onChange((value) => {
-        const trimmed = value.trim();
-        if (trimmed && !/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return Promise.resolve();
-        return mutate((target) => { target.anchorDate = trimmed; });
-      }));
+    return [
+      this.renderDefinition(
+        'Workspace name',
+        ['profile', 'label'],
+        (setting) => {
+          setting.addText((text) => text
+            .setValue(profile.name)
+            .onChange((value) => mutate((target) => { target.name = value.trim(); })));
+        },
+        'A display label for this sprint workspace. Changing it does not rename vault files.',
+      ),
+      this.renderDefinition(
+        'Sprint folder',
+        ['workspace', 'folder', 'rename'],
+        (setting) => {
+          setting
+            .addText((text) => text
+              .setPlaceholder('Sprint')
+              .setValue(profile.rootFolder)
+              .onChange((value) => { folderDraft = value; }))
+            .addButton((button) => button
+              .setButtonText('Rename')
+              .onClick(() => { void this.renameProfileRoot(profile.id, folderDraft); }));
+        },
+        'The vault folder containing this workspace. Rename moves the existing folder and updates its configured base paths.',
+      ),
+      this.renderDefinition('Tasks base', ['tasks', 'base'], (setting) => {
+        setting.addText((text) => text
+          .setPlaceholder('Sprint/Tasks.base')
+          .setValue(profile.tasksBasePath)
+          .onChange((value) => mutate((target) => { target.tasksBasePath = value.trim(); })));
+      }),
+      this.renderDefinition('Sprints base', ['sprints', 'base'], (setting) => {
+        setting.addText((text) => text
+          .setPlaceholder('Sprint/Sprints.base')
+          .setValue(profile.sprintsBasePath)
+          .onChange((value) => mutate((target) => { target.sprintsBasePath = value.trim(); })));
+      }),
+      this.renderDefinition('Projects base', ['projects', 'base'], (setting) => {
+        setting.addText((text) => text
+          .setPlaceholder('Sprint/Projects.base')
+          .setValue(profile.projectsBasePath)
+          .onChange((value) => mutate((target) => { target.projectsBasePath = value.trim(); })));
+      }),
+      this.renderDefinition('Cadence anchor', ['anchor', 'date'], (setting) => {
+        setting.addText((text) => text
+          .setPlaceholder(getWeekStart(getLocalDate(), startDay))
+          .setValue(profile.anchorDate)
+          .onChange((value) => {
+            const trimmed = value.trim();
+            if (trimmed && !/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return Promise.resolve();
+            return mutate((target) => { target.anchorDate = trimmed; });
+          }));
+      }),
+      this.renderDefinition('Duration override', ['duration', 'weeks'], (setting) => {
+        setting.addDropdown((dropdown) => {
+          dropdown.addOption('default', 'Use global default');
+          for (let weeks = 1; weeks <= 8; weeks += 1) {
+            dropdown.addOption(String(weeks), `${weeks} ${weeks === 1 ? 'week' : 'weeks'}`);
+          }
+          dropdown.setValue(profile.overrides.durationWeeks?.toString() ?? 'default')
+            .onChange((value) => mutate((target) => {
+              if (value === 'default') delete target.overrides.durationWeeks;
+              else target.overrides.durationWeeks = Number(value);
+            }));
+        });
+      }),
+      this.renderDefinition('Start day override', ['start day', 'cadence'], (setting) => {
+        setting.addDropdown((dropdown) => {
+          dropdown.addOption('default', 'Use global default');
+          for (const [index, day] of DAYS.entries()) dropdown.addOption(String(index), day);
+          dropdown.setValue(profile.overrides.startDay?.toString() ?? 'default')
+            .onChange((value) => mutate((target) => {
+              if (value === 'default') delete target.overrides.startDay;
+              else target.overrides.startDay = Number(value);
+            }));
+        });
+      }),
+      this.renderDefinition('Rollover override', ['incomplete', 'unfinished'], (setting) => {
+        setting.addDropdown((dropdown) => dropdown
+          .addOption('default', 'Use global default')
+          .addOption('next', 'Move to current sprint')
+          .addOption('backlog', 'Move to backlog')
+          .addOption('keep', 'Keep in original sprint')
+          .setValue(profile.overrides.incompleteTaskPolicy ?? 'default')
+          .onChange((value) => mutate((target) => {
+            if (value === 'default') delete target.overrides.incompleteTaskPolicy;
+            else target.overrides.incompleteTaskPolicy = value as IncompleteTaskPolicy;
+          })));
+      }),
+      this.renderDefinition('Future sprint override', ['future', 'count'], (setting) => {
+        setting.addDropdown((dropdown) => {
+          dropdown.addOption('default', 'Use global default');
+          for (let count = 1; count <= 8; count += 1) {
+            dropdown.addOption(String(count), String(count));
+          }
+          dropdown.setValue(profile.overrides.futureSprintCount?.toString() ?? 'default')
+            .onChange((value) => mutate((target) => {
+              if (value === 'default') delete target.overrides.futureSprintCount;
+              else target.overrides.futureSprintCount = Number(value);
+            }));
+        });
+      }),
+      this.renderDefinition('Naming override', ['name', 'number'], (setting) => {
+        setting.addText((text) => text
+          .setPlaceholder(this.feature.settings.defaults.namingFormat)
+          .setValue(profile.overrides.namingFormat ?? '')
+          .onChange((value) => mutate((target) => {
+            const trimmed = value.trim();
+            if (trimmed) target.overrides.namingFormat = trimmed;
+            else delete target.overrides.namingFormat;
+          })));
+      }),
+    ];
+  }
 
-    new Setting(container).setName('Duration override').addDropdown((dropdown) => {
-      dropdown.addOption('default', 'Use global default');
-      for (let weeks = 1; weeks <= 8; weeks += 1) {
-        dropdown.addOption(String(weeks), `${weeks} ${weeks === 1 ? 'week' : 'weeks'}`);
-      }
-      dropdown.setValue(profile.overrides.durationWeeks?.toString() ?? 'default')
-        .onChange((value) => mutate((target) => {
-          if (value === 'default') delete target.overrides.durationWeeks;
-          else target.overrides.durationWeeks = Number(value);
-        }));
-    });
+  private maintenanceDefinitions(): SettingDefinition[] {
+    return [
+      this.renderDefinition(
+        'Synchronize now',
+        ['sync', 'sprints'],
+        (setting) => {
+          setting.addButton((button) => button
+            .setButtonText('Sync sprints')
+            .setCta()
+            .onClick(() => { void this.sync(); }));
+        },
+        'Create missing sprint notes, update lifecycle statuses, and apply rollover rules.',
+      ),
+      this.renderDefinition(
+        'Generate bases',
+        ['base', 'dashboard', 'instructions'],
+        (setting) => {
+          setting.addButton((button) => button
+            .setButtonText('Generate bases')
+            .onClick(() => { void this.generateBases(); }));
+        },
+        'Create missing base files, dashboard notes, local AI instructions, and shared vault-root skills.',
+      ),
+    ];
+  }
 
-    new Setting(container).setName('Start day override').addDropdown((dropdown) => {
-      dropdown.addOption('default', 'Use global default');
-      for (const [index, day] of DAYS.entries()) dropdown.addOption(String(index), day);
-      dropdown.setValue(profile.overrides.startDay?.toString() ?? 'default')
-        .onChange((value) => mutate((target) => {
-          if (value === 'default') delete target.overrides.startDay;
-          else target.overrides.startDay = Number(value);
-        }));
-    });
-
-    new Setting(container).setName('Rollover override').addDropdown((dropdown) => dropdown
-      .addOption('default', 'Use global default')
-      .addOption('next', 'Move to current sprint')
-      .addOption('backlog', 'Move to backlog')
-      .addOption('keep', 'Keep in original sprint')
-      .setValue(profile.overrides.incompleteTaskPolicy ?? 'default')
-      .onChange((value) => mutate((target) => {
-        if (value === 'default') delete target.overrides.incompleteTaskPolicy;
-        else target.overrides.incompleteTaskPolicy = value as IncompleteTaskPolicy;
-      })));
-
-    new Setting(container).setName('Future sprint override').addDropdown((dropdown) => {
-      dropdown.addOption('default', 'Use global default');
-      for (let count = 1; count <= 8; count += 1) {
-        dropdown.addOption(String(count), String(count));
-      }
-      dropdown.setValue(profile.overrides.futureSprintCount?.toString() ?? 'default')
-        .onChange((value) => mutate((target) => {
-          if (value === 'default') delete target.overrides.futureSprintCount;
-          else target.overrides.futureSprintCount = Number(value);
-        }));
-    });
-
-    new Setting(container).setName('Naming override').addText((text) => text
-      .setPlaceholder(this.feature.settings.defaults.namingFormat)
-      .setValue(profile.overrides.namingFormat ?? '')
-      .onChange((value) => mutate((target) => {
-        const trimmed = value.trim();
-        if (trimmed) target.overrides.namingFormat = trimmed;
-        else delete target.overrides.namingFormat;
-      })));
+  private aiDefinitions(): SettingDefinition[] {
+    return [
+      this.renderDefinition(
+        'Sprint vault',
+        ['Codex', 'Claude Code', 'skill'],
+        (setting) => {
+          setting.addButton((button) => button
+            .setButtonText('View and edit')
+            .onClick(() => {
+              new SprintSkillEditorModal(
+                this.app,
+                structuredClone(this.feature.settings),
+                (instructions) => { void this.saveSkillInstructions('sprint-vault', instructions); },
+              ).open();
+            }));
+        },
+        'Installed in the vault-root .agents and .claude skill folders. Existing folders and unmanaged skills are preserved.',
+      ),
+      this.renderDefinition(
+        'Vault-root AI instructions',
+        ['AGENTS.md', 'CLAUDE.md', 'instructions'],
+        (setting) => {
+          setting.addToggle((toggle) => toggle
+            .setValue(this.feature.settings.generateVaultRootInstructions)
+            .onChange(async (enabled) => {
+              await this.mutateSettings((settings) => {
+                settings.generateVaultRootInstructions = enabled;
+              });
+              await this.generateBases();
+            }));
+        },
+        'Also generate Sprint-managed AGENTS.md and CLAUDE.md files at the Obsidian vault root. Existing instruction files are never overwritten.',
+      ),
+    ];
   }
 
   private mutateSettings(mutation: (settings: SprintSettings) => void): Promise<void> {
