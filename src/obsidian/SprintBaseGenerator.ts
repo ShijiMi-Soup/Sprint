@@ -536,6 +536,9 @@ export class SprintBaseGenerator {
     };
 
     for (const profile of settings.profiles.filter((candidate) => candidate.enabled)) {
+      const root = normalizeFolder(profile.rootFolder);
+      const workspaceExisted = root !== ''
+        && this.app.vault.getAbstractFileByPath(root) !== null;
       const definitions = definitionsForProfile(settings, profile);
       for (const definition of definitions) {
         await this.withContext(`Migrate Base folder for ${definition.path}`, () => (
@@ -564,7 +567,7 @@ export class SprintBaseGenerator {
           else result.skipped += 1;
         });
       }
-      if (profile.samplesInitialized !== true) {
+      if (profile.samplesInitialized !== true && !workspaceExisted) {
         await this.withContext(`Create samples for ${profile.name || profile.id}`, () => (
           this.writeSampleNotes(settings, profile)
         ));

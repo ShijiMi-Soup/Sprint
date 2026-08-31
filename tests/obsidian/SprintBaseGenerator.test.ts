@@ -15,6 +15,102 @@ describe('SprintBaseGenerator', () => {
     expect(getSprintSummaryWriteAction('My dashboard', 'generated')).toBe('preserve');
   });
 
+  it('does not add tutorial samples when reinstalling into an existing empty workspace', async () => {
+    const folders = new Set<string>(['Sprint']);
+    const files = new Map<string, string>();
+    const create = jest.fn(async (path: string, content: string) => {
+      files.set(path, content);
+      return { path };
+    });
+    const app = {
+      vault: {
+        configDir: '.obsidian',
+        adapter: {
+          exists: jest.fn(async () => false),
+          read: jest.fn(async () => '{}'),
+          write: jest.fn(),
+        },
+        getAbstractFileByPath: jest.fn((path: string) => (
+          folders.has(path) || files.has(path) ? { path } : null
+        )),
+        getFileByPath: jest.fn((path: string) => (
+          files.has(path) ? { path } : null
+        )),
+        read: jest.fn(async (file: { path: string }) => files.get(file.path) ?? ''),
+        process: jest.fn(async (
+          file: { path: string },
+          update: (content: string) => string,
+        ) => {
+          const next = update(files.get(file.path) ?? '');
+          files.set(file.path, next);
+          return next;
+        }),
+        createFolder: jest.fn(async (path: string) => { folders.add(path); }),
+        create,
+      },
+      metadataCache: { getFileCache: jest.fn(() => null) },
+      fileManager: { trashFile: jest.fn() },
+    };
+
+    await new SprintBaseGenerator(app as never).generate(
+      normalizeSprintSettings({ enabled: true, rootFolder: 'Sprint' }),
+    );
+
+    expect(create).toHaveBeenCalledWith('Sprint/Tasks.base', expect.any(String));
+    expect([...files.keys()].some((path) => path.startsWith('Sprint/Tasks/'))).toBe(false);
+    expect([...files.keys()].some((path) => path.startsWith('Sprint/Projects/'))).toBe(false);
+  });
+
+  it('preserves an existing populated workspace without adding tutorial samples', async () => {
+    const userTaskPath = 'Sprint/Tasks/Write literature review.md';
+    const userTask = '# Write literature review\n';
+    const folders = new Set<string>(['Sprint', 'Sprint/Tasks']);
+    const files = new Map<string, string>([[userTaskPath, userTask]]);
+    const create = jest.fn(async (path: string, content: string) => {
+      files.set(path, content);
+      return { path };
+    });
+    const app = {
+      vault: {
+        configDir: '.obsidian',
+        adapter: {
+          exists: jest.fn(async () => false),
+          read: jest.fn(async () => '{}'),
+          write: jest.fn(),
+        },
+        getAbstractFileByPath: jest.fn((path: string) => (
+          folders.has(path) || files.has(path) ? { path } : null
+        )),
+        getFileByPath: jest.fn((path: string) => (
+          files.has(path) ? { path } : null
+        )),
+        read: jest.fn(async (file: { path: string }) => files.get(file.path) ?? ''),
+        process: jest.fn(async (
+          file: { path: string },
+          update: (content: string) => string,
+        ) => {
+          const next = update(files.get(file.path) ?? '');
+          files.set(file.path, next);
+          return next;
+        }),
+        createFolder: jest.fn(async (path: string) => { folders.add(path); }),
+        create,
+      },
+      metadataCache: { getFileCache: jest.fn(() => null) },
+      fileManager: { trashFile: jest.fn() },
+    };
+
+    await new SprintBaseGenerator(app as never).generate(
+      normalizeSprintSettings({ enabled: true, rootFolder: 'Sprint' }),
+    );
+
+    expect(files.get(userTaskPath)).toBe(userTask);
+    expect([...files.keys()].filter((path) => path.startsWith('Sprint/Tasks/'))).toEqual([
+      userTaskPath,
+    ]);
+    expect([...files.keys()].some((path) => path.startsWith('Sprint/Projects/'))).toBe(false);
+  });
+
   it('creates missing task, sprint, and project Bases without overwriting existing files', async () => {
     const oldCodexSkill = 'Agile PM/.codex/skills/sprint/SKILL.md';
     const oldDashboard = 'Agile PM/Agile PM.md';
