@@ -190,6 +190,27 @@ export function getEstimateTone(points: number): 'low' | 'medium' | 'high' | 'cr
   return 'low';
 }
 
+export function formatTaskCardProperty(property: string, value: unknown): string {
+  if (Array.isArray(value)) {
+    return value
+      .map((entry) => formatTaskCardProperty(property, entry))
+      .filter(Boolean)
+      .join(', ');
+  }
+  if (typeof value === 'string') {
+    const normalized = value.trim();
+    if (property === 'due' || property === 'due date') {
+      const date = /^(\d{4})-(\d{2})-(\d{2})(?:T.*)?$/.exec(normalized);
+      if (date) return `${date[1]}/${date[2]}/${date[3]}`;
+    }
+    const link = normalized.replace(/^\[\[/, '').replace(/\]\]$/, '');
+    const [target = '', alias] = link.split('|');
+    return alias?.trim() || target.split('/').at(-1)?.trim() || '';
+  }
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+  return '';
+}
+
 class SprintBasesView extends BasesView {
   readonly type = SPRINT_BASES_VIEW_TYPE;
   private readonly containerEl: HTMLElement;
@@ -678,7 +699,7 @@ class SprintBasesView extends BasesView {
         renderedMetadata = true;
         continue;
       }
-      const displayValue = this.formatCardProperty(value);
+      const displayValue = formatTaskCardProperty(property, value);
       if (!displayValue) continue;
       const label = this.config.getDisplayName(propertyId);
       meta.createSpan({
@@ -714,19 +735,6 @@ class SprintBasesView extends BasesView {
       }
       void this.app.workspace.openLinkText(entry.file.path, '', false);
     });
-  }
-
-  private formatCardProperty(value: unknown): string {
-    if (Array.isArray(value)) {
-      return value.map((entry) => this.formatCardProperty(entry)).filter(Boolean).join(', ');
-    }
-    if (typeof value === 'string') {
-      const normalized = value.trim().replace(/^\[\[/, '').replace(/\]\]$/, '');
-      const [target = '', alias] = normalized.split('|');
-      return alias?.trim() || target.split('/').at(-1)?.trim() || '';
-    }
-    if (typeof value === 'number' || typeof value === 'boolean') return String(value);
-    return '';
   }
 
   private registerDropTarget(

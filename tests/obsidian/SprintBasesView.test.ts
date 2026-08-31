@@ -4,6 +4,7 @@ import {
   applyNewTaskFrontmatter,
   createSprintBasesViewRegistration,
   createSprintVelocityViewRegistration,
+  formatTaskCardProperty,
   getCardTaskProperties,
   getEstimateTone,
   getEditableTaskProperties,
@@ -55,6 +56,12 @@ describe('SprintBasesView', () => {
     expect(getCardTaskProperties(undefined, ['note.estimate', 'note.sprint']))
       .toEqual(['note.estimate', 'note.sprint']);
     expect(getCardTaskProperties(['file.name'], ['note.estimate'])).toEqual([]);
+  });
+
+  it('renders Due values as date-only YYYY/MM/DD labels', () => {
+    expect(formatTaskCardProperty('due', '2026-08-31T14:00:00')).toBe('2026/08/31');
+    expect(formatTaskCardProperty('due', '2026-09-04')).toBe('2026/09/04');
+    expect(formatTaskCardProperty('project', '[[Projects/Research]]')).toBe('Research');
   });
 
   it('applies Kanban context and editable values to a new task', () => {
