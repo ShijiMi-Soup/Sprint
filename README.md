@@ -16,7 +16,8 @@ Sprint also works with AI coding agents. It can install local skills that teach 
 - Project-grouped Kanban boards for all, current, and next-sprint tasks.
 - Drag-and-drop task state changes and inline task creation.
 - Collapsible and hideable project sections.
-- Configurable task-card and new-task properties.
+- Native Bases **Properties** selection for task-card fields, with Estimate and Sprint as sensible defaults.
+- Inline task creation with Estimate and Due date fields by default.
 - Task archiving without deleting the underlying notes.
 - Sprint overview cards with dates, completed tasks, completed points, reviews, and retrospectives.
 - A dependency-free velocity bar chart.
@@ -33,7 +34,7 @@ The full Sprint board groups tasks by project and separates Not started, In prog
 
 ### Create tasks from the board
 
-Each project and state column includes a **New task** action. New tasks inherit the selected project, sprint scope, and state, and can include configurable properties such as Estimate.
+Each project and state column includes a **New task** action. New tasks inherit the selected project, sprint scope, and state, and include Estimate and Due date fields by default.
 
 ![Focused inline New task form with an estimate field](docs/images/new-task-form.png)
 

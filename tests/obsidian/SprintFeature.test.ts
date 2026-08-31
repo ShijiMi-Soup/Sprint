@@ -1,6 +1,9 @@
 import type { Plugin } from 'obsidian';
 
-import { normalizeSprintSettings } from '@/domain/SprintSettings';
+import {
+  CURRENT_SUPPORT_SCHEMA_VERSION,
+  normalizeSprintSettings,
+} from '@/domain/SprintSettings';
 import { SprintFeature } from '@/SprintFeature';
 import { SprintOnboardingModal } from '@/obsidian/SprintOnboardingModal';
 import type { SprintSettingsStore } from '@/obsidian/SprintSettingsStore';
@@ -182,7 +185,7 @@ describe('SprintFeature', () => {
   it('skips support-file generation after the current schema is installed', async () => {
     const currentSettings = normalizeSprintSettings(undefined);
     currentSettings.enabled = true;
-    currentSettings.supportSchemaVersion = 1;
+    currentSettings.supportSchemaVersion = CURRENT_SUPPORT_SCHEMA_VERSION;
     currentSettings.profiles[0]!.samplesInitialized = true;
     const feature = Object.create(SprintFeature.prototype) as SprintFeature;
     const managerSync = jest.fn().mockResolvedValue({

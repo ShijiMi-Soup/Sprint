@@ -264,6 +264,10 @@ describe('SprintBaseGenerator', () => {
     );
     expect(app.vault.adapter.write).toHaveBeenCalledWith(
       '.obsidian/types.json',
+      expect.stringContaining('"due": "date"'),
+    );
+    expect(app.vault.adapter.write).toHaveBeenCalledWith(
+      '.obsidian/types.json',
       expect.not.stringContaining('"owner"'),
     );
   });
@@ -308,8 +312,10 @@ describe('SprintBaseGenerator', () => {
     const tasksBase = written.get('Agile PM/Tasks.base') ?? '';
     expect(tasksBase.indexOf('name: "Sprint board"')).toBeLessThan(tasksBase.indexOf('name: "Tasks"'));
     expect(tasksBase).toContain('newTaskProperty1: note.estimate');
-    expect(tasksBase).toContain('cardProperty1: note.estimate');
-    expect(tasksBase).toContain('cardProperty2: note.sprint');
+    expect(tasksBase).toContain('newTaskProperty2: note.due');
+    expect(tasksBase).toContain('      - note.estimate');
+    expect(tasksBase).toContain('      - note.sprint');
+    expect(tasksBase).toContain('note.due:');
     expect(tasksBase).toContain('note.archived != true');
     expect(tasksBase).toContain('name: "Current sprint"');
     expect(tasksBase).toContain('sprintScope: "current"');
@@ -322,6 +328,8 @@ describe('SprintBaseGenerator', () => {
       'Not started means both state booleans are false',
     );
     expect(written.get('Agile PM/AGENTS.md')).toContain('boolean `archived`');
+    expect(written.get('Agile PM/AGENTS.md')).toContain('date `due`');
+    expect(written.get('Agile PM/Tasks/Add your first real task.md')).toContain('due:');
   });
 
   it('adds board metadata without replacing custom Base configuration', () => {
@@ -336,6 +344,8 @@ describe('SprintBaseGenerator', () => {
       '    name: Sprint board',
       '    sprintProfile: agile-pm',
       '    layout: kanban',
+      '    cardProperty1: note.custom',
+      '    cardProperty2: note.sprint',
       '    customSetting: keep-me',
       '  - type: table',
       '    name: Tasks',
@@ -373,13 +383,18 @@ describe('SprintBaseGenerator', () => {
 
     expect(parsedTasks.properties['note.custom']?.displayName).toBe('Custom');
     expect(parsedTasks.properties['note.archived']?.displayName).toBe('Archived');
+    expect(parsedTasks.properties['note.due']?.displayName).toBe('Due');
     expect(parsedTasks.views[0]).toEqual(expect.objectContaining({
       customSetting: 'keep-me',
-      cardProperty1: 'note.estimate',
-      cardProperty2: 'note.sprint',
+      order: ['file.name', 'note.custom', 'note.sprint'],
+      newTaskProperty1: 'note.estimate',
+      newTaskProperty2: 'note.due',
     }));
+    expect(parsedTasks.views[0]).not.toHaveProperty('cardProperty1');
+    expect(parsedTasks.views[0]).not.toHaveProperty('cardProperty2');
     expect(parsedTasks.views[0]?.filters?.and).toContain('note.archived != true');
     expect(parsedTasks.views[1]?.order).toContain('note.archived');
+    expect(parsedTasks.views[1]?.order).toContain('note.due');
     expect(parsedTasks.views[2]?.order).toEqual(['note.custom']);
     expect(migrateTasksBaseContent(migratedTasks, 'agile-pm')).toBe(migratedTasks);
     expect(parsedProjects.properties['note.hidden']?.displayName).toBe('Hidden');

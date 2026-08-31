@@ -130,7 +130,7 @@ function sprintInstructions(settings: SprintSettings, profiles = settings.profil
     '',
     '## Standard Metadata',
     '',
-    'Task notes use numeric `estimate`, boolean `in progress`, boolean `is done`, boolean `archived`, and link-list `project` and `sprint` properties. Project notes use boolean `in progress`, boolean `is done`, and boolean `hidden`. They may also use `priority`, `due`, or other vault-specific properties. Sprint notes use `sprint number`, `start date`, `end date`, `sprint status`, `review`, and `retrospective`.',
+    'Task notes use numeric `estimate`, date `due`, boolean `in progress`, boolean `is done`, boolean `archived`, and link-list `project` and `sprint` properties. Project notes use boolean `in progress`, boolean `is done`, and boolean `hidden`. They may also use `priority` or other vault-specific properties. Sprint notes use `sprint number`, `start date`, `end date`, `sprint status`, `review`, and `retrospective`.',
     '',
     '## Operating Rules',
     '',
@@ -220,13 +220,16 @@ function sprintView(
       '      property: formula.task_state',
       '      direction: ASC',
     ] : []),
+    '    order:',
+    '      - file.name',
+    '      - note.estimate',
+    ...(!sprintScope ? ['      - note.sprint'] : []),
     `    sprintProfile: ${yamlString(profileId)}`,
     ...(sprintScope ? [`    sprintScope: ${yamlString(sprintScope)}`] : []),
     `    layout: ${yamlString(layout)}`,
     `    showCompleted: ${showCompleted}`,
-    '    cardProperty1: note.estimate',
-    ...(!sprintScope ? ['    cardProperty2: note.sprint'] : []),
     '    newTaskProperty1: note.estimate',
+    '    newTaskProperty2: note.due',
   ];
 }
 
@@ -251,6 +254,7 @@ function taskBaseProperties(): Record<string, string> {
     'note.project': 'Project',
     'note.sprint': 'Sprint',
     'note.estimate': 'Estimate',
+    'note.due': 'Due',
     'note.in progress': 'In progress',
     'note.is done': 'Done',
     'note.archived': 'Archived',
@@ -274,6 +278,7 @@ function tasksBaseContent(
         'note.project',
         'note.sprint',
         'note.estimate',
+        'note.due',
         'note.in progress',
         'note.is done',
         'note.archived',
@@ -351,6 +356,10 @@ export function migrateTasksBaseContent(content: string, profileId: string): str
   return migrateBaseContent(content, (base) => {
     let changed = false;
     const properties = asRecord(base.properties);
+    if (properties && !properties['note.due']) {
+      properties['note.due'] = { displayName: 'Due' };
+      changed = true;
+    }
     if (properties && !properties['note.archived']) {
       properties['note.archived'] = { displayName: 'Archived' };
       changed = true;
@@ -360,17 +369,37 @@ export function migrateTasksBaseContent(content: string, profileId: string): str
       const view = asRecord(candidate);
       if (!view) continue;
       if (view.type === 'table' && view.name === 'Tasks') {
+        changed = appendOrder(view, 'note.due') || changed;
         changed = appendOrder(view, 'note.archived') || changed;
         continue;
       }
       if (view.type !== SPRINT_BASES_VIEW_TYPE || view.sprintProfile !== profileId) continue;
       changed = appendFilter(view, 'note.archived != true') || changed;
-      if (view.cardProperty1 === undefined) {
-        view.cardProperty1 = 'note.estimate';
+      if (!Array.isArray(view.order)) {
+        const legacyCardProperties = [1, 2, 3]
+          .map((position) => view[`cardProperty${position}`])
+          .filter((property): property is string => typeof property === 'string');
+        const defaultCardProperties = [
+          'note.estimate',
+          ...(view.name === 'Sprint board' ? ['note.sprint'] : []),
+        ];
+        view.order = ['file.name', ...(
+          legacyCardProperties.length > 0 ? legacyCardProperties : defaultCardProperties
+        )];
         changed = true;
       }
-      if (view.name === 'Sprint board' && view.cardProperty2 === undefined) {
-        view.cardProperty2 = 'note.sprint';
+      if (view.newTaskProperty1 === undefined) {
+        view.newTaskProperty1 = 'note.estimate';
+        changed = true;
+      }
+      if (view.newTaskProperty2 === undefined) {
+        view.newTaskProperty2 = 'note.due';
+        changed = true;
+      }
+      for (const position of [1, 2, 3]) {
+        const key = `cardProperty${position}`;
+        if (view[key] === undefined) continue;
+        delete view[key];
         changed = true;
       }
     }
@@ -792,6 +821,7 @@ export class SprintBaseGenerator {
     const sprintProperty = (name: string): string[] => version === 'current'
       ? ['sprint:', `  - "[[${name}]]"`]
       : [];
+    const dueProperty = version === 'current' ? ['due:'] : [];
     const notes: SampleNote[] = [
       {
         path: `${root}/Projects/Welcome to Agile PM.md`,
@@ -834,6 +864,7 @@ export class SprintBaseGenerator {
         content: frontmatterNote(
           [
             'estimate: 1',
+            ...dueProperty,
             'in progress: false',
             'is done: false',
             ...(version === 'current' ? ['archived: false'] : []),
@@ -854,6 +885,7 @@ export class SprintBaseGenerator {
         content: frontmatterNote(
           [
             'estimate: 2',
+            ...dueProperty,
             'in progress: false',
             'is done: false',
             ...(version === 'current' ? ['archived: false'] : []),
@@ -876,6 +908,7 @@ export class SprintBaseGenerator {
         content: frontmatterNote(
           [
             'estimate: 3',
+            ...dueProperty,
             'in progress: true',
             'is done: false',
             ...(version === 'current' ? ['archived: false'] : []),
@@ -896,6 +929,7 @@ export class SprintBaseGenerator {
         content: frontmatterNote(
           [
             'estimate: 1',
+            ...dueProperty,
             'in progress: false',
             'is done: true',
             ...(version === 'current' ? ['archived: false'] : []),
@@ -916,6 +950,7 @@ export class SprintBaseGenerator {
         content: frontmatterNote(
           [
             'estimate: 2',
+            ...dueProperty,
             'in progress: false',
             'is done: false',
             ...(version === 'current' ? ['archived: false'] : []),
@@ -940,6 +975,7 @@ export class SprintBaseGenerator {
           content: frontmatterNote(
             [
               'estimate: 2',
+              'due:',
               'in progress: false',
               'is done: false',
               'archived: false',
@@ -960,6 +996,7 @@ export class SprintBaseGenerator {
           content: frontmatterNote(
             [
               'estimate: 3',
+              'due:',
               'in progress: false',
               'is done: false',
               'archived: false',

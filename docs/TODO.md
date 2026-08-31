@@ -28,7 +28,7 @@
 
 ## Task planning and board configuration
 
-- [ ] Add a `due` date property to newly created task notes and the generated Tasks Base
+- [x] Add a `due` date property to newly created task notes and the generated Tasks Base
   schema. Show Due by default in the inline task editor opened from a Kanban lane's
   **New task** button. Preserve existing task notes that do not have a due date, and use
   Obsidian's native date-property editor rather than a plain text field.
@@ -36,7 +36,7 @@
   and existing sprint notes. Support drag-and-drop reassignment without changing task
   state, show useful capacity or estimate totals, preserve project relationships, and
   confirm behavior for unassigned, archived, and completed tasks before implementation.
-- [ ] Integrate the native Base **Properties** selector with the custom Kanban views so
+- [x] Integrate the native Base **Properties** selector with the custom Kanban views so
   users can choose which task properties appear on cards. Changes should apply to Sprint
   board, Current sprint, and Next sprint views as appropriate, preserve property order,
   avoid duplicating the task title, and continue to use sensible defaults for newly

@@ -45,10 +45,11 @@ export function applyNewTaskFrontmatter(
   state: TaskBoardState,
   projectTarget: string | null,
   sprintTarget: string | null,
-  properties: Record<string, string | number>,
+  properties: Record<string, string | number | null>,
 ): void {
   applyTaskBoardState(frontmatter, state);
   if (frontmatter.archived === undefined) frontmatter.archived = false;
+  if (frontmatter.due === undefined && properties.due === undefined) frontmatter.due = null;
   if (projectTarget) frontmatter.project = [`[[${projectTarget}]]`];
   if (sprintTarget) frontmatter.sprint = [`[[${sprintTarget}]]`];
   Object.assign(frontmatter, properties);
@@ -100,25 +101,15 @@ export function getSprintBasesOptions(
     },
     {
       type: 'group',
-      displayName: 'Task cards',
-      items: [1, 2, 3].map((position) => ({
-        key: `cardProperty${position}`,
-        type: 'property' as const,
-        displayName: `Property ${position}`,
-        default: position === 1 ? 'note.estimate' : undefined,
-        placeholder: position === 1 ? 'Estimate' : 'None',
-        filter: isCardTaskProperty,
-      })),
-    },
-    {
-      type: 'group',
       displayName: 'New task form',
       items: [1, 2, 3].map((position) => ({
         key: `newTaskProperty${position}`,
         type: 'property' as const,
         displayName: `Property ${position}`,
-        default: position === 1 ? 'note.estimate' : undefined,
-        placeholder: position === 1 ? 'Estimate' : 'None',
+        default: position === 1
+          ? 'note.estimate'
+          : position === 2 ? 'note.due' : undefined,
+        placeholder: position === 1 ? 'Estimate' : position === 2 ? 'Due' : 'None',
         filter: isEditableTaskProperty,
       })),
     },
@@ -133,6 +124,17 @@ function isCardTaskProperty(property: BasesPropertyId): boolean {
   ].includes(property);
 }
 
+export function getCardTaskProperties(
+  order: unknown,
+  legacyProperties: unknown,
+): BasesPropertyId[] {
+  const source = Array.isArray(order) ? order : legacyProperties;
+  if (!Array.isArray(source)) return [];
+  return [...new Set(source.filter((property): property is BasesPropertyId => (
+    typeof property === 'string' && isCardTaskProperty(property as BasesPropertyId)
+  )))];
+}
+
 function isEditableTaskProperty(property: BasesPropertyId): boolean {
   return property.startsWith('note.') && ![
     'note.project',
@@ -144,7 +146,7 @@ function isEditableTaskProperty(property: BasesPropertyId): boolean {
 }
 
 export function getEditableTaskProperties(value: unknown): string[] {
-  if (!Array.isArray(value)) return ['estimate'];
+  if (!Array.isArray(value)) return ['estimate', 'due'];
   return [...new Set(value
     .filter((entry): entry is string => typeof entry === 'string')
     .map((entry) => entry.trim().replace(/^note\./, ''))
@@ -542,7 +544,7 @@ class SprintBasesView extends BasesView {
     try {
       file = await this.app.vault.create(path, '');
       const sprint = this.getSprintForNewTask(rootFolder);
-      const properties: Record<string, string | number> = {};
+      const properties: Record<string, string | number | null> = {};
       for (const [property, input] of propertyInputs) {
         const value = input.value.trim();
         if (!value) continue;
@@ -653,9 +655,14 @@ class SprintBasesView extends BasesView {
       },
     });
     link.createSpan({ cls: 'sprint-bases-entry-title', text: entry.file.basename });
-    const configuredProperties = [1, 2, 3]
+    const legacyProperties = [1, 2, 3]
       .map((position) => this.config.getAsPropertyId(`cardProperty${position}`))
       .filter((property): property is BasesPropertyId => property !== null);
+    const nativeOrder = this.config.getOrder();
+    const configuredProperties = getCardTaskProperties(
+      nativeOrder.length > 0 ? nativeOrder : undefined,
+      legacyProperties,
+    );
     const meta = link.createSpan({ cls: 'sprint-bases-entry-meta' });
     let renderedMetadata = false;
     for (const propertyId of configuredProperties) {

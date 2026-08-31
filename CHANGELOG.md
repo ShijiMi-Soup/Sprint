@@ -7,6 +7,8 @@
 - Added a two-step first-run setup prompt that can enable automatic sprints and create the workspace when the plugin is first enabled.
 - Detects existing Sprint workspaces during onboarding and connects without recreating tutorial projects or tasks.
 - Added a settings action for reopening the setup guide after it is dismissed.
+- Added native Due date metadata to generated tasks and a date input to the inline New task form.
+- Connected Kanban card fields to the native Bases Properties selector, including property ordering and migration of previous card-field settings.
 
 ### Documentation
 

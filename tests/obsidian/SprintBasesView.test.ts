@@ -4,6 +4,7 @@ import {
   applyNewTaskFrontmatter,
   createSprintBasesViewRegistration,
   createSprintVelocityViewRegistration,
+  getCardTaskProperties,
   getEstimateTone,
   getEditableTaskProperties,
   getSprintBasesOptions,
@@ -21,16 +22,14 @@ describe('SprintBasesView', () => {
       expect.objectContaining({ key: 'showCompleted', type: 'toggle' }),
       expect.objectContaining({
         type: 'group',
-        displayName: 'Task cards',
-        items: expect.arrayContaining([
-          expect.objectContaining({ key: 'cardProperty1', type: 'property' }),
-        ]),
-      }),
-      expect.objectContaining({
-        type: 'group',
         displayName: 'New task form',
         items: expect.arrayContaining([
           expect.objectContaining({ key: 'newTaskProperty1', type: 'property' }),
+          expect.objectContaining({
+            key: 'newTaskProperty2',
+            type: 'property',
+            default: 'note.due',
+          }),
         ]),
       }),
     ]));
@@ -45,7 +44,17 @@ describe('SprintBasesView', () => {
   it('normalizes the properties shown in the new-task composer', () => {
     expect(getEditableTaskProperties(['note.estimate', 'due', 'estimate', 'project']))
       .toEqual(['estimate', 'due']);
-    expect(getEditableTaskProperties(undefined)).toEqual(['estimate']);
+    expect(getEditableTaskProperties(undefined)).toEqual(['estimate', 'due']);
+  });
+
+  it('uses the native Properties order for task-card metadata', () => {
+    expect(getCardTaskProperties(
+      ['file.name', 'note.due', 'note.estimate', 'formula.task_state'],
+      ['note.sprint'],
+    )).toEqual(['note.due', 'note.estimate']);
+    expect(getCardTaskProperties(undefined, ['note.estimate', 'note.sprint']))
+      .toEqual(['note.estimate', 'note.sprint']);
+    expect(getCardTaskProperties(['file.name'], ['note.estimate'])).toEqual([]);
   });
 
   it('applies Kanban context and editable values to a new task', () => {
@@ -68,6 +77,14 @@ describe('SprintBasesView', () => {
       estimate: 3,
       due: '2026-09-04',
     });
+  });
+
+  it('adds a blank Due date to new tasks when one is not entered', () => {
+    const frontmatter: Record<string, unknown> = {};
+
+    applyNewTaskFrontmatter(frontmatter, 'Not started', null, null, { estimate: 2 });
+
+    expect(frontmatter).toEqual(expect.objectContaining({ due: null }));
   });
 
   it('creates dedicated child containers for embedded custom views', () => {
