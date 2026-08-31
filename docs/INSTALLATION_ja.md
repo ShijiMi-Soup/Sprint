@@ -2,7 +2,7 @@
 
 [English](INSTALLATION.md) | [日本語](INSTALLATION_ja.md)
 
-このガイドでは、ObsidianのコミュニティプラグインからSprintをインストールし、最初のSprintワークスペースを作成する手順を説明します。スクリーンショットはSprint 0.1.2で撮影されていますが、0.1.3でも手順は同じです。
+このガイドでは、ObsidianのコミュニティプラグインからSprint 0.1.3をインストールし、新しいSprintワークスペースを作成する手順と、既存ワークスペースへ再接続する手順を説明します。
 
 ## 必要環境
 
@@ -10,7 +10,7 @@
 - Obsidianのコアプラグイン**Bases**が有効であること
 - 対象Vaultでコミュニティプラグインが有効であること
 
-## Sprintをインストールする
+## 新規インストール
 
 1. Sprintを使用するVaultを開き、左下の設定アイコンを選択します。
 
@@ -24,49 +24,63 @@
 
    ![インストール済みのSprintとEnableボタン](images/installation/03-enable-plugin.png)
 
-4. Sprintを初めて有効にすると、初期設定の案内が表示されます。**Set up Sprint**を選択し、ワークスペースの概要を確認してから**Create workspace**を選択します。Automatic sprintsが有効になり、ワークスペースが自動的に作成されます。
+4. Sprintの初期設定画面が表示されます。**Set up Sprint**を選択します。
 
-   ファイルを作成しない場合は**Not now**を選択します。後から**設定 -> Sprint -> Setup guide**を開いて、セットアップを再開できます。
+   ![Not nowとSet up Sprintを表示したSprintの初期設定画面](images/installation/13-new-workspace-welcome.png)
 
-5. 同期完了の通知を確認します。作成されたスプリントノート数と、移動されたタスク数が表示されます。
+5. フォルダ、スプリント周期、将来のスプリント数を確認します。**Create workspace**を選択すると、自動同期が有効になり、必要なファイルが作成されます。
 
-   ![Automatic sprintsが有効になり同期完了通知が表示されたSprint設定](images/installation/07-synchronization-complete.png)
+   ![デフォルトのフォルダとスプリント周期を表示した作成確認画面](images/installation/14-new-workspace-confirmation.png)
 
-Sprintは不足しているワークスペースファイルだけを作成し、既存のSprintワークスペースを置き換えません。設定されたフォルダがすでに存在する場合、初期設定の案内には既存ワークスペースを使用する選択肢が表示され、チュートリアル用のプロジェクトやタスクは再作成されません。別に用意されている**Reset workspace**は破壊的な操作で、実行には明示的な確認が必要です。
+   ファイルを作成しない場合は**Not now**を選択します。後から**設定 -> Sprint -> Setup guide**を開いてセットアップを再開できます。
 
-## 後からセットアップする
+## ワークスペースを確認する
 
-**Not now**を選択した場合は、次の手順で設定できます。
+セットアップが完了すると、デフォルトの`Sprint`フォルダに、タスク、スプリント、プロジェクトの各フォルダ、3つのBasesファイル、AI向けのローカル指示、`Sprint Summary.md`が作成されます。
 
-1. **設定 -> コミュニティプラグイン**でSprintを開き、**Options**を選択します。
+![新しいSprintワークスペースに作成されたファイルとフォルダ](images/installation/15-generated-workspace-files.png)
 
-   ![有効化されたSprintとOptionsボタン](images/installation/04-open-options.png)
+`Sprint/Sprint Summary.md`を開くか、コマンドパレットから**Open Sprint Summary**を実行します。最初のセクションには、現在のスプリントのタスクがプロジェクト別、状態別に表示されます。
 
-2. 初期設定を確認します。スプリント期間、開始曜日、未完了タスクの扱い、将来のスプリント数、命名規則、ワークスペースの保存先を変更できます。
+![現在のスプリントのプロジェクトボードを表示したSprint Summary](images/installation/16-generated-summary-current-tasks.png)
 
-   ![Automatic sprints、Global defaults、Workspaceを表示したSprint設定](images/installation/05-review-settings.png)
+下へスクロールすると、Velocityグラフで完了したストーリーポイントを確認し、Projectsテーブルでプロジェクトを管理できます。
 
-3. **Automatic sprints**をオンにします。Sprintが作成するファイルを説明する確認画面が表示されます。続行する場合は**Turn on**を選択します。
+![Velocityグラフを表示したSprint Summary](images/installation/17-generated-summary-velocity.png)
 
-   ![Automatic sprintsが作成するファイルを説明する確認画面](images/installation/06-confirm-automatic-sprints.png)
+![Projectsテーブルを表示したSprint Summary](images/installation/18-generated-summary-projects.png)
 
-## 作成結果を確認する
+## 既存のSprintワークスペース
 
-6. ファイルエクスプローラーに戻ります。デフォルトの`Sprint`フォルダには、タスク、スプリント、プロジェクトの各フォルダ、3つのBasesファイル、Sprint Summary、AI向けのローカル指示ファイルが作成されます。
+設定先に`Sprint`フォルダがすでに存在し、プラグインに保存済みの設定がない場合、初期設定画面には新規作成ではなく**Use workspace**が表示されます。
 
-   ![Obsidianのファイルエクスプローラーに作成されたSprintワークスペース](images/installation/08-generated-workspace.png)
+![既存ワークスペースを検出したSprintの初期設定画面](images/installation/19-existing-workspace-welcome.png)
 
-   ![Sprintワークスペース内のデフォルトファイルとフォルダ](images/installation/09-workspace-files.png)
+検出されたフォルダを確認し、**Use workspace**を選択します。Sprintは不足しているサポートファイルとスプリントノートだけを作成します。既存の内容は保持され、チュートリアル用のプロジェクトやタスクは再作成されません。
 
-7. `Sprint/Sprint Summary.md`を開くか、コマンドパレットから**Open Sprint Summary**を実行します。Current Tasksには、現在のスプリントのタスクがプロジェクト別のカンバンボードで表示されます。
+![既存のSprintワークスペースへ接続する確認画面](images/installation/20-existing-workspace-confirmation.png)
 
-   ![現在のタスクをプロジェクト別カンバンで表示したSprint Summary](images/installation/10-summary-current-tasks.png)
+Sprintを再インストールまたは更新しても、スプリント番号はリセットされず、既存ワークスペースは上書きされません。別に用意されている**Reset workspace**設定は破壊的な操作で、実行には明示的な確認が必要です。
 
-8. 下へスクロールすると、Velocityグラフで完了ポイントを確認し、Projectsテーブルでプロジェクトの状態を確認できます。
+## 作成されるファイル
 
-    ![Velocityグラフを表示したSprint Summary](images/installation/11-summary-velocity.png)
+デフォルトのワークスペース構成は次のとおりです。
 
-    ![Projectsテーブルを表示したSprint Summary](images/installation/12-summary-projects.png)
+```text
+Vault root/
+├── .agents/skills/sprint/SKILL.md
+├── .claude/skills/sprint/SKILL.md
+└── Sprint/
+    ├── Tasks.base
+    ├── Sprints.base
+    ├── Projects.base
+    ├── Projects/
+    ├── Tasks/
+    ├── Sprints/
+    ├── AGENTS.md
+    ├── CLAUDE.md
+    └── Sprint Summary.md
+```
 
 ## 手動インストール
 
@@ -77,10 +91,11 @@ Sprintは不足しているワークスペースファイルだけを作成し�
 3. `<Vault>/.obsidian/plugins/sprint/`を作成し、3つのファイルをすべてその直下に配置します。
 4. Obsidianを再起動するか、コマンドパレットから**Reload app without saving**を実行します。
 5. **設定 -> コミュニティプラグイン**を開き、Sprintを有効にします。
+6. 初期設定画面に従って、ワークスペースの新規作成または再接続を行います。
 
 ## トラブルシューティング
 
-- **コミュニティプラグインにSprintが表示されない:** Obsidianを更新し、コミュニティプラグイン画面を閉じてから開き直し、もう一度検索してください。
+- **初期設定画面が表示されない:** **設定 -> Sprint -> Setup guide**を開いてください。
 - **ワークスペースファイルが作成されない:** **設定 -> Sprint**を開き、**Automatic sprints**が有効になっていることを確認してください。
 - **ボードが表示されない:** **設定 -> コアプラグイン**を開き、**Bases**を有効にしてください。
-- **手動でファイルを配置したがSprintが表示されない:** `main.js`、`manifest.json`、`styles.css`が`.obsidian/plugins/sprint/`の直下にあることを確認し、Obsidianを再読み込みしてください。
+- **手動インストール後にSprintが表示されない:** `main.js`、`manifest.json`、`styles.css`が`.obsidian/plugins/sprint/`の直下にあることを確認し、Obsidianを再読み込みしてください。

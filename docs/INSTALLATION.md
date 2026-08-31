@@ -2,7 +2,7 @@
 
 [English](INSTALLATION.md) | [日本語](INSTALLATION_ja.md)
 
-This guide walks through installing Sprint from Obsidian Community plugins and creating your first Sprint workspace. The screenshots were taken with Sprint 0.1.2; the same steps apply to 0.1.3.
+This guide covers installing Sprint 0.1.3 from Obsidian Community plugins and creating or reconnecting a Sprint workspace.
 
 ## Requirements
 
@@ -10,7 +10,7 @@ This guide walks through installing Sprint from Obsidian Community plugins and c
 - The Obsidian **Bases** core plugin enabled
 - Community plugins enabled for the vault
 
-## Install Sprint
+## New Installation
 
 1. Open the vault where you want to use Sprint. Select the settings icon in the lower-left corner.
 
@@ -24,49 +24,63 @@ This guide walks through installing Sprint from Obsidian Community plugins and c
 
    ![The installed Sprint plugin with the Enable button visible](images/installation/03-enable-plugin.png)
 
-4. Sprint opens a welcome prompt the first time it is enabled. Select **Set up Sprint**, review the workspace summary, then select **Create workspace**. Sprint enables Automatic sprints and creates the workspace for you.
+4. Sprint opens the welcome prompt. Select **Set up Sprint**.
 
-   Select **Not now** if you do not want Sprint to create files. You can reopen the guide later from **Settings -> Sprint -> Setup guide**.
+   ![Sprint first-run welcome prompt with Not now and Set up Sprint actions](images/installation/13-new-workspace-welcome.png)
 
-5. Wait for the synchronization notice. It reports how many sprint notes were created and how many tasks were moved.
+5. Review the folder, cadence, and future-sprint count. Select **Create workspace** to enable automatic synchronization and create the files.
 
-   ![Sprint settings with Automatic sprints enabled and a successful synchronization notice](images/installation/07-synchronization-complete.png)
+   ![Sprint workspace confirmation with the default folder and cadence](images/installation/14-new-workspace-confirmation.png)
 
-Sprint creates missing workspace files without replacing an existing Sprint workspace. When the configured folder already exists, the welcome prompt offers to use that workspace and does not recreate tutorial projects or tasks. The separate **Reset workspace** action is destructive and requires explicit confirmation.
+   Select **Not now** if you do not want Sprint to create files. You can reopen this prompt later from **Settings -> Sprint -> Setup guide**.
 
-## Set Up Later
+## Check The Workspace
 
-If you selected **Not now**, configure Sprint manually:
+After setup, the default `Sprint` folder contains the task, sprint, and project folders; three Bases files; local AI instructions; and `Sprint Summary.md`.
 
-1. Open **Settings -> Community plugins**, select Sprint, then select **Options**.
+![The files and folders generated in a new Sprint workspace](images/installation/15-generated-workspace-files.png)
 
-   ![The enabled Sprint plugin with the Options button visible](images/installation/04-open-options.png)
+Open `Sprint/Sprint Summary.md`, or run **Open Sprint Summary** from the command palette. The first section shows current-sprint tasks grouped by project and state.
 
-2. Review the defaults. You can configure the sprint duration, start day, incomplete-task behavior, number of future sprints, naming pattern, and workspace location.
+![Sprint Summary showing the current-sprint project boards](images/installation/16-generated-summary-current-tasks.png)
 
-   ![Sprint settings showing automatic sprints, global defaults, and workspace options](images/installation/05-review-settings.png)
+Scroll down to see completed story points in the Velocity chart and manage projects in the Projects table.
 
-3. Turn on **Automatic sprints**. Sprint shows a confirmation dialog describing the files it will create. Select **Turn on** to continue.
+![Sprint Summary showing the Velocity chart](images/installation/17-generated-summary-velocity.png)
 
-   ![Confirmation dialog explaining which files Automatic sprints will create](images/installation/06-confirm-automatic-sprints.png)
+![Sprint Summary showing the Projects table](images/installation/18-generated-summary-projects.png)
 
-## Check The Result
+## Existing Sprint Workspace
 
-6. Return to the file explorer. The default `Sprint` folder contains task, sprint, and project folders; three Bases files; a Sprint Summary; and local AI instruction files.
+If the configured `Sprint` folder already exists but the plugin has no saved settings, the welcome prompt offers **Use workspace** instead of creating a new one.
 
-   ![The generated Sprint workspace in the Obsidian file explorer](images/installation/08-generated-workspace.png)
+![Sprint welcome prompt after detecting an existing workspace](images/installation/19-existing-workspace-welcome.png)
 
-   ![Close-up of the default files and folders inside the Sprint workspace](images/installation/09-workspace-files.png)
+Review the detected folder and select **Use workspace**. Sprint creates only missing support files and sprint notes. Existing content is preserved, and tutorial projects and tasks are not recreated.
 
-7. Open `Sprint/Sprint Summary.md`, or run **Open Sprint Summary** from the command palette. The Current Tasks section shows the current-sprint Kanban board grouped by project.
+![Confirmation for connecting to an existing Sprint workspace](images/installation/20-existing-workspace-confirmation.png)
 
-   ![Sprint Summary showing current tasks in project-grouped Kanban columns](images/installation/10-summary-current-tasks.png)
+Reinstalling or updating Sprint does not reset sprint numbering or overwrite the existing workspace. The separate **Reset workspace** setting is destructive and requires explicit confirmation.
 
-8. Scroll down to review completed points in the Velocity chart and the current project list.
+## Files Created
 
-    ![Sprint Summary showing the Velocity chart](images/installation/11-summary-velocity.png)
+The default workspace structure is:
 
-    ![Sprint Summary showing the Projects table](images/installation/12-summary-projects.png)
+```text
+Vault root/
+├── .agents/skills/sprint/SKILL.md
+├── .claude/skills/sprint/SKILL.md
+└── Sprint/
+    ├── Tasks.base
+    ├── Sprints.base
+    ├── Projects.base
+    ├── Projects/
+    ├── Tasks/
+    ├── Sprints/
+    ├── AGENTS.md
+    ├── CLAUDE.md
+    └── Sprint Summary.md
+```
 
 ## Manual Installation
 
@@ -77,10 +91,11 @@ If Sprint is unavailable in the Community plugins browser:
 3. Create `<vault>/.obsidian/plugins/sprint/` and place all three files directly inside it.
 4. Restart Obsidian, or run **Reload app without saving** from the command palette.
 5. Open **Settings -> Community plugins** and enable Sprint.
+6. Follow the welcome prompt to create or reconnect the workspace.
 
 ## Troubleshooting
 
-- **Sprint does not appear in Community plugins:** Update Obsidian, close and reopen the Community plugins browser, then search again.
+- **The welcome prompt does not appear:** Open **Settings -> Sprint -> Setup guide**.
 - **No workspace files appear:** Open **Settings -> Sprint** and make sure **Automatic sprints** is enabled.
 - **The board does not render:** Open **Settings -> Core plugins** and enable **Bases**.
-- **You installed files manually but Sprint is missing:** Confirm that `main.js`, `manifest.json`, and `styles.css` are directly inside `.obsidian/plugins/sprint/`, then reload Obsidian.
+- **Sprint does not appear after manual installation:** Confirm that `main.js`, `manifest.json`, and `styles.css` are directly inside `.obsidian/plugins/sprint/`, then reload Obsidian.
