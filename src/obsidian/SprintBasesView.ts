@@ -1,9 +1,11 @@
 import type {
+  App,
   BasesAllOptions,
   BasesEntry,
   BasesPropertyId,
   BasesViewRegistration,
   QueryController,
+  TAbstractFile,
   TFile,
 } from 'obsidian';
 import { BasesView, normalizePath, Notice, setIcon } from 'obsidian';
@@ -13,6 +15,19 @@ import type { SprintSettings } from '../domain/types';
 export const SPRINT_BASES_VIEW_TYPE = 'sprint-agent-sprint-board';
 export const SPRINT_VELOCITY_VIEW_TYPE = 'sprint-agent-velocity-chart';
 const TASK_DRAG_TYPE = 'application/x-sprint-task-path';
+
+function markdownFilesInFolder(app: App, folder: string): TFile[] {
+  const target = app.vault.getFolderByPath(normalizePath(folder));
+  if (!target) return [];
+  return target.children.filter((child: TAbstractFile): child is TFile => (
+    'extension' in child && child.extension === 'md'
+  ));
+}
+
+function getFrontmatterProperty(frontmatter: unknown, property: string): unknown {
+  if (typeof frontmatter !== 'object' || frontmatter === null) return undefined;
+  return (frontmatter as Record<string, unknown>)[property];
+}
 
 export type TaskBoardState = 'Not started' | 'In progress' | 'Done';
 const TASK_STATES: TaskBoardState[] = ['Not started', 'In progress', 'Done'];
@@ -193,9 +208,10 @@ class SprintBasesView extends BasesView {
   onDataUpdated(): void {
     this.containerEl.empty();
 
-    const profileId = String(
-      this.config.get('sprintProfile') ?? this.getSettings().profiles[0]?.id ?? '',
-    );
+    const configuredProfile = this.config.get('sprintProfile');
+    const profileId = typeof configuredProfile === 'string'
+      ? configuredProfile
+      : (this.getSettings().profiles[0]?.id ?? '');
     const profile = this.getSettings().profiles.find(({ id }) => id === profileId);
     const header = this.containerEl.createDiv({ cls: 'sprint-bases-header' });
     header.createEl('h3', { text: this.config.name });
@@ -407,7 +423,8 @@ class SprintBasesView extends BasesView {
   private async setProjectHidden(file: TFile, hidden: boolean): Promise<void> {
     try {
       await this.app.fileManager.processFrontMatter(file, (frontmatter) => {
-        frontmatter.hidden = hidden;
+        const properties = frontmatter as Record<string, unknown>;
+        properties.hidden = hidden;
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -542,7 +559,7 @@ class SprintBasesView extends BasesView {
       });
       new Notice(`Task created: ${file.basename}`);
     } catch (error) {
-      if (file) await this.app.vault.delete(file);
+      if (file) await this.app.fileManager.trashFile(file);
       const message = error instanceof Error ? error.message : String(error);
       new Notice(`Unable to create task: ${message}`);
       throw error;
@@ -621,9 +638,7 @@ class SprintBasesView extends BasesView {
   }
 
   private filesIn(folder: string): TFile[] {
-    const prefix = `${folder}/`;
-    return this.app.vault.getMarkdownFiles()
-      .filter((file) => file.path.startsWith(prefix) && !file.path.slice(prefix.length).includes('/'));
+    return markdownFilesInFolder(this.app, folder);
   }
 
   private renderTaskCard(entries: HTMLElement, entry: BasesEntry, project: string): void {
@@ -645,12 +660,12 @@ class SprintBasesView extends BasesView {
     let renderedMetadata = false;
     for (const propertyId of configuredProperties) {
       const property = String(propertyId).replace(/^note\./, '');
-      const value = frontmatter?.[property];
+      const value = getFrontmatterProperty(frontmatter, property);
       if (property === 'estimate') {
         const points = estimate(frontmatter);
         if (points <= 0) continue;
         meta.createSpan({
-          cls: `sprint-bases-entry-points sprint-bases-entry-points--${getEstimateTone(points)}`,
+          cls: `sprint-bases-entry-points sprint-bases-entry-points-${getEstimateTone(points)}`,
           text: `${points} pt`,
         });
         renderedMetadata = true;
@@ -834,9 +849,10 @@ class SprintVelocityView extends BasesView {
   onDataUpdated(): void {
     this.containerEl.empty();
 
-    const profileId = String(
-      this.config.get('sprintProfile') ?? this.getSettings().profiles[0]?.id ?? '',
-    );
+    const configuredProfile = this.config.get('sprintProfile');
+    const profileId = typeof configuredProfile === 'string'
+      ? configuredProfile
+      : (this.getSettings().profiles[0]?.id ?? '');
     const profile = this.getSettings().profiles.find(({ id }) => id === profileId);
     const header = this.containerEl.createDiv({ cls: 'sprint-bases-header' });
     header.createEl('h3', { text: this.config.name });
@@ -900,9 +916,7 @@ class SprintVelocityView extends BasesView {
   }
 
   private filesIn(folder: string): TFile[] {
-    const prefix = `${folder}/`;
-    return this.app.vault.getMarkdownFiles()
-      .filter((file) => file.path.startsWith(prefix) && !file.path.slice(prefix.length).includes('/'));
+    return markdownFilesInFolder(this.app, folder);
   }
 }
 

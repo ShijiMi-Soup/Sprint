@@ -51,7 +51,7 @@ Sprint overview cards show the last, current, and next sprint with dates, comple
 
 ## Requirements
 
-- Obsidian 1.10.0 or later.
+- Obsidian 1.13.0 or later.
 - The Obsidian Bases core plugin enabled.
 
 ## Installation

@@ -86,6 +86,10 @@ describe('SprintBaseGenerator', () => {
         getFileCache: jest.fn(() => null),
       },
       fileManager: {
+        trashFile: jest.fn(async (file: { path: string }) => {
+          existing.delete(file.path);
+          written.delete(file.path);
+        }),
         renameFile: jest.fn(async (file: { path: string }, path: string) => {
           const content = written.get(file.path);
           existing.delete(file.path);
@@ -112,9 +116,8 @@ describe('SprintBaseGenerator', () => {
     expect(written.has('.claude/skills/sprint/SKILL.md')).toBe(true);
     expect(written.has('Agile PM/.agents/skills/sprint/SKILL.md')).toBe(false);
     expect(written.has('Agile PM/.claude/skills/sprint/SKILL.md')).toBe(false);
-    expect(app.vault.delete).toHaveBeenCalledWith(
+    expect(app.fileManager.trashFile).toHaveBeenCalledWith(
       expect.objectContaining({ path: oldCodexSkill }),
-      true,
     );
     expect(written.has('Agile PM/Sprint Summary.md')).toBe(true);
     expect(written.has(oldDashboard)).toBe(false);
@@ -194,6 +197,7 @@ describe('SprintBaseGenerator', () => {
         }),
       },
       metadataCache: { getFileCache: jest.fn(() => null) },
+      fileManager: { trashFile: jest.fn() },
     };
     const settings = normalizeSprintSettings({ enabled: true, rootFolder: 'Agile PM' });
     settings.generateVaultRootInstructions = true;
@@ -460,6 +464,7 @@ describe('SprintBaseGenerator', () => {
         create: jest.fn(async (path: string) => { existing.add(path); return { path }; }),
       },
       metadataCache: { getFileCache: jest.fn(() => null) },
+      fileManager: { trashFile: jest.fn() },
     };
 
     await new SprintBaseGenerator(app as never).generate(
@@ -478,9 +483,8 @@ describe('SprintBaseGenerator', () => {
       expect.objectContaining({ path: existingSkill }),
       expect.any(Function),
     );
-    expect(app.vault.delete).not.toHaveBeenCalledWith(
+    expect(app.fileManager.trashFile).not.toHaveBeenCalledWith(
       expect.objectContaining({ path: existingSkill }),
-      true,
     );
   });
 
@@ -489,8 +493,8 @@ describe('SprintBaseGenerator', () => {
     const app = {
       vault: {
         getAbstractFileByPath: jest.fn((path: string) => (path === 'Agile PM' ? agilePm : null)),
-        delete: jest.fn(),
       },
+      fileManager: { trashFile: jest.fn() },
     };
 
     await new SprintBaseGenerator(app as never).resetProfileRoot(
@@ -498,7 +502,7 @@ describe('SprintBaseGenerator', () => {
       'agile-pm',
     );
 
-    expect(app.vault.delete).toHaveBeenCalledWith(agilePm, true);
+    expect(app.fileManager.trashFile).toHaveBeenCalledWith(agilePm);
   });
 
   it('continues when Obsidian reports a folder already exists during generation', async () => {

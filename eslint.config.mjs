@@ -1,19 +1,27 @@
-import js from '@eslint/js';
-import tseslint from 'typescript-eslint';
+import { defineConfig } from 'eslint/config';
+import obsidianmd from 'eslint-plugin-obsidianmd';
 
-export default tseslint.config(
+export default defineConfig(
   { ignores: ['dist/**', 'main.js', 'node_modules/**', 'jest.config.cjs'] },
-  js.configs.recommended,
-  ...tseslint.configs.recommended,
+  ...obsidianmd.configs.recommended,
   {
     files: ['**/*.ts'],
     languageOptions: {
-      parserOptions: { project: './tsconfig.json' }
+      parserOptions: {
+        projectService: {
+          allowDefaultProject: ['eslint.config.mjs']
+        }
+      }
     },
     rules: {
       '@typescript-eslint/consistent-type-imports': 'error',
       '@typescript-eslint/explicit-function-return-type': 'error',
-      '@typescript-eslint/no-explicit-any': 'error'
+      '@typescript-eslint/no-explicit-any': 'error',
+      'obsidianmd/ui/sentence-case': ['warn', {
+        enforceCamelCaseLower: true,
+        ignoreWords: ['Sprint', 'Codex', 'Code'],
+        ignoreRegex: ['\\.claude']
+      }]
     }
   }
 );

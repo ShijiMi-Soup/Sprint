@@ -1,6 +1,31 @@
 import { ObsidianSprintVault } from '@/obsidian/ObsidianSprintVault';
 
 describe('ObsidianSprintVault', () => {
+  it('lists only Markdown notes directly inside the requested folder', () => {
+    const sprint = {
+      path: 'Sprint/Sprints/Sprint 1.md',
+      basename: 'Sprint 1',
+      extension: 'md',
+    };
+    const app = {
+      vault: {
+        getFolderByPath: jest.fn(() => ({
+          children: [
+            sprint,
+            { path: 'Sprint/Sprints/notes.txt', basename: 'notes', extension: 'txt' },
+            { path: 'Sprint/Sprints/Archive', name: 'Archive', children: [] },
+          ],
+        })),
+      },
+      metadataCache: {},
+      fileManager: {},
+    };
+
+    expect(new ObsidianSprintVault(app as never).listMarkdownNotes('Sprint/Sprints'))
+      .toEqual([sprint]);
+    expect(app.vault.getFolderByPath).toHaveBeenCalledWith('Sprint/Sprints');
+  });
+
   it('treats an already-existing folder error as successful folder creation', async () => {
     const app = {
       vault: {

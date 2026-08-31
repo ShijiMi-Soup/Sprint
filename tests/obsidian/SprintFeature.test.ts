@@ -48,10 +48,10 @@ describe('SprintFeature', () => {
     expect((host as unknown as { addCommand: jest.Mock }).addCommand)
       .toHaveBeenCalledWith(expect.objectContaining({ id: 'generate-bases' }));
     expect((host as unknown as { addCommand: jest.Mock }).addCommand)
-      .toHaveBeenCalledWith(expect.objectContaining({ id: 'open-sprint-summary' }));
+      .toHaveBeenCalledWith(expect.objectContaining({ id: 'open-summary' }));
     const commands = (host as unknown as { addCommand: jest.Mock }).addCommand.mock.calls
       .map(([command]: [{ id: string; callback: () => Promise<void> }]) => command);
-    await commands.find(({ id }) => id === 'open-sprint-summary')?.callback();
+    await commands.find(({ id }) => id === 'open-summary')?.callback();
     expect((host.app.workspace as unknown as { openLinkText: jest.Mock }).openLinkText)
       .toHaveBeenCalledWith('Sprint/Sprint Summary.md', '', false);
     expect(saved).toHaveBeenCalledWith(expect.objectContaining({ enabled: true }));

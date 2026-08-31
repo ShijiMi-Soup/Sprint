@@ -1,8 +1,8 @@
 {
   "id": "sprint",
   "name": "Sprint",
-  "version": "0.1.0",
-  "minAppVersion": "1.10.0",
+  "version": "0.1.1",
+  "minAppVersion": "1.13.0",
   "description": "Automatic sprint planning, rollover, project boards, and Bases views.",
   "author": "Shijimi",
   "isDesktopOnly": false

@@ -1,5 +1,15 @@
 # Development Log
 
+## 2026-08-31 - Community checker remediation
+
+- Fixed all blocking findings reported for the initial Community release.
+- Replaced direct element styles with CSS classes and added official Obsidian CSS linting.
+- Replaced permanent file deletion with Obsidian's trash API.
+- Added searchable settings definitions and removed deprecated settings APIs, raising the minimum supported Obsidian version to 1.13.0 for `0.1.1` while preserving `0.1.0` compatibility metadata.
+- Removed whole-vault Markdown enumeration in favor of direct configured-folder traversal.
+- Simplified command names and removed the plugin ID from the summary command ID.
+- Added the official Obsidian ESLint configuration to the release check and covered folder-scoped discovery with a regression test.
+
 ## 2026-08-28 - Versioned startup maintenance
 
 - Added a persisted support-schema version so Bases, summaries, AI instructions, skills, and property types migrate once per relevant plugin upgrade.

@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.1.1 - 2026-08-31
+
+### Changed
+
+- Adopted searchable Obsidian 1.13 settings definitions and updated the minimum supported Obsidian version to 1.13.0.
+- Scoped sprint, task, and project discovery to their configured folders instead of enumerating every Markdown file in the vault.
+- Renamed commands to avoid repeating the plugin name and changed the summary command ID to `open-summary`.
+- Moved Community review rules into the local release checks with the official Obsidian ESLint and Stylelint configurations.
+
+### Fixed
+
+- Replaced direct textarea style assignments with a CSS class.
+- Replaced permanent vault deletion calls with `FileManager.trashFile()` so Obsidian's deletion preference is respected.
+- Removed deprecated settings button, slider, and refresh APIs.
+- Removed `!important` declarations from task-card styling.
+- Added safe typing around mutable frontmatter and task-card metadata.
+
 ## 0.1.0 - 2026-08-29
 
 ### Added

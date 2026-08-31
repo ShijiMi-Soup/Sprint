@@ -93,6 +93,10 @@
   overflow-x: auto;
 }
 
+.sprint-bases-group {
+  min-width: 0;
+}
+
 .sprint-bases-kanban .sprint-bases-group {
   background: var(--background-secondary);
   border: 1px solid var(--background-modifier-border);
@@ -110,10 +114,6 @@
   border-color: color-mix(in srgb, var(--interactive-accent) 55%, var(--background-modifier-border));
 }
 
-.sprint-bases-group {
-  min-width: 0;
-}
-
 .sprint-bases-entries {
   display: grid;
   gap: var(--size-4-2);
@@ -121,8 +121,11 @@
   min-height: 44px;
 }
 
-.sprint-bases-view button.sprint-bases-entry {
-  align-items: start;
+.sprint-bases-kanban button.sprint-bases-entry {
+  cursor: grab;
+}
+
+body .sprint-bases-view button.sprint-bases-entry {
   background: var(--background-primary-alt);
   border: 1px solid var(--background-modifier-border);
   border-radius: 6px;
@@ -131,9 +134,9 @@
   gap: var(--size-4-2);
   grid-template-columns: minmax(0, 1fr);
   grid-auto-rows: max-content;
-  height: auto !important;
-  justify-items: start;
-  max-height: none !important;
+  height: auto;
+  place-items: start;
+  max-height: none;
   min-height: 36px;
   overflow: hidden;
   overflow-wrap: anywhere;
@@ -142,12 +145,12 @@
   width: 100%;
 }
 
-.sprint-bases-kanban button.sprint-bases-entry {
-  cursor: grab;
-}
-
 .sprint-bases-kanban button.sprint-bases-entry:active {
   cursor: grabbing;
+}
+
+.sprint-skill-textarea {
+  width: 100%;
 }
 
 .sprint-bases-view button.sprint-bases-entry.is-dragging {
@@ -327,25 +330,25 @@
   padding: 1px var(--size-4-2);
 }
 
-.sprint-bases-view .sprint-bases-entry-points--low {
+.sprint-bases-view .sprint-bases-entry-points-low {
   background: color-mix(in srgb, var(--color-green) 12%, transparent);
   border-color: color-mix(in srgb, var(--color-green) 28%, transparent);
   color: color-mix(in srgb, var(--color-green) 72%, var(--text-normal));
 }
 
-.sprint-bases-view .sprint-bases-entry-points--medium {
+.sprint-bases-view .sprint-bases-entry-points-medium {
   background: color-mix(in srgb, var(--color-yellow) 12%, transparent);
   border-color: color-mix(in srgb, var(--color-yellow) 28%, transparent);
   color: color-mix(in srgb, var(--color-yellow) 72%, var(--text-normal));
 }
 
-.sprint-bases-view .sprint-bases-entry-points--high {
+.sprint-bases-view .sprint-bases-entry-points-high {
   background: color-mix(in srgb, var(--color-orange) 12%, transparent);
   border-color: color-mix(in srgb, var(--color-orange) 28%, transparent);
   color: color-mix(in srgb, var(--color-orange) 72%, var(--text-normal));
 }
 
-.sprint-bases-view .sprint-bases-entry-points--critical {
+.sprint-bases-view .sprint-bases-entry-points-critical {
   background: color-mix(in srgb, var(--color-red) 12%, transparent);
   border-color: color-mix(in srgb, var(--color-red) 28%, transparent);
   color: color-mix(in srgb, var(--color-red) 72%, var(--text-normal));

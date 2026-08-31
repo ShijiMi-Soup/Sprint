@@ -64,17 +64,17 @@ export class SprintFeature implements SprintFeatureApi {
     });
     this.plugin.addCommand({
       id: 'sync',
-      name: 'Sync sprints',
+      name: 'Sync',
       callback: () => { void this.syncWithNotice(); },
     });
     this.plugin.addCommand({
       id: 'generate-bases',
-      name: 'Generate sprint Bases',
+      name: 'Generate bases',
       callback: () => { void this.generateBasesWithNotice(); },
     });
     this.plugin.addCommand({
-      id: 'open-sprint-summary',
-      name: 'Open Sprint Summary',
+      id: 'open-summary',
+      name: 'Open summary',
       callback: () => { void this.openAgilePm(); },
     });
     this.scheduleSync();
@@ -260,7 +260,7 @@ export class SprintFeature implements SprintFeatureApi {
   private async openAgilePm(): Promise<void> {
     const profile = this.currentSettings.profiles[0];
     if (!profile?.rootFolder) {
-      new Notice('No Sprint folder is configured.');
+      new Notice('No sprint folder is configured.');
       return;
     }
     const root = profile.rootFolder.replace(/^\/+|\/+$/g, '');

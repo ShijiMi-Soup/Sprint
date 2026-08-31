@@ -1,4 +1,4 @@
-import type { App, TFile } from 'obsidian';
+import type { App, TAbstractFile, TFile } from 'obsidian';
 import { normalizePath } from 'obsidian';
 
 import type { SprintVault, SprintVaultNote } from '../domain/SprintManager';
@@ -23,9 +23,11 @@ export class ObsidianSprintVault implements SprintVault {
   constructor(private readonly app: App) {}
 
   listMarkdownNotes(folder: string): SprintVaultNote[] {
-    const prefix = `${normalizePath(folder)}/`;
-    return this.app.vault.getMarkdownFiles()
-      .filter((file) => file.path.startsWith(prefix) && !file.path.slice(prefix.length).includes('/'));
+    const target = this.app.vault.getFolderByPath(normalizePath(folder));
+    if (!target) return [];
+    return target.children.filter((child: TAbstractFile): child is TFile => (
+      'extension' in child && child.extension === 'md'
+    ));
   }
 
   getFrontmatter(note: SprintVaultNote): Record<string, unknown> {

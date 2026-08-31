@@ -1,4 +1,4 @@
-import type { App, Plugin } from 'obsidian';
+import type { App, Plugin, SettingDefinitionItem } from 'obsidian';
 import { Modal, Notice, PluginSettingTab, Setting } from 'obsidian';
 
 import { getLocalDate, getWeekStart } from '../domain/SprintSchedule';
@@ -25,10 +25,10 @@ class EnableAutomaticSprintsModal extends Modal {
     this.titleEl.setText('Turn on automatic sprints?');
     this.contentEl.empty();
     this.contentEl.createEl('p', {
-      text: 'Sprint will create missing Tasks, Sprints, and Projects Base files, current and future sprint notes, a Sprint Summary note, local AI instruction files, and vault-root skills for Codex and Claude Code.',
+      text: 'Sprint will create missing tasks, sprints, and projects base files, current and future sprint notes, a summary note, local AI instruction files, and vault-root skills for Codex and Claude Code.',
     });
     this.contentEl.createEl('p', {
-      text: 'Existing Base files are upgraded in place while custom views and properties are preserved.',
+      text: 'Existing base files are upgraded in place while custom views and properties are preserved.',
     });
 
     new Setting(this.contentEl)
@@ -91,7 +91,7 @@ class ResetSprintProfileModal extends Modal {
         confirmButton = button;
         button
           .setButtonText('Reset folder')
-          .setWarning()
+          .setDestructive()
           .setDisabled(true)
           .onClick(() => {
             if (this.confirmation !== 'Yes, delete.') return;
@@ -132,17 +132,17 @@ class SprintSkillEditorModal extends Modal {
         this.previewEl = textarea.inputEl;
         textarea.inputEl.readOnly = true;
         textarea.inputEl.rows = 14;
-        textarea.inputEl.style.width = '100%';
+        textarea.inputEl.addClass('sprint-skill-textarea');
         this.updatePreview();
       });
 
     new Setting(this.contentEl)
       .setName('Vault-specific instructions')
-      .setDesc('Optional instructions appended to the generated Sprint workflow.')
+      .setDesc('Optional instructions appended to the generated sprint workflow.')
       .addTextArea((textarea) => {
         textarea.setValue(this.customInstructions);
         textarea.inputEl.rows = 8;
-        textarea.inputEl.style.width = '100%';
+        textarea.inputEl.addClass('sprint-skill-textarea');
         textarea.onChange((value) => {
           this.customInstructions = value;
           this.updatePreview();
@@ -185,13 +185,40 @@ export class SprintSettingTab extends PluginSettingTab {
     super(app, plugin);
   }
 
-  override display(): void {
-    const { containerEl } = this;
-    containerEl.empty();
+  override getSettingDefinitions(): SettingDefinitionItem[] {
+    return [
+      this.sectionDefinition(
+        'Automatic sprints',
+        ['enable', 'cadence', 'rollover'],
+        (container) => { this.renderAutomaticSprints(container); },
+      ),
+      this.sectionDefinition(
+        'Global defaults',
+        ['duration', 'start day', 'incomplete tasks', 'future sprints', 'naming'],
+        (container) => { this.renderDefaults(container); },
+      ),
+      this.sectionDefinition(
+        'Workspace',
+        ['folder', 'Tasks base', 'Sprints base', 'Projects base', 'cadence anchor'],
+        (container) => { this.renderProfiles(container); },
+      ),
+      this.sectionDefinition(
+        'Maintenance',
+        ['synchronize', 'generate Bases'],
+        (container) => { this.renderMaintenance(container); },
+      ),
+      this.sectionDefinition(
+        'AI skills',
+        ['Codex', 'Claude Code', 'instructions'],
+        (container) => { this.renderAiSettings(container); },
+      ),
+    ];
+  }
 
+  private renderAutomaticSprints(containerEl: HTMLElement): void {
     new Setting(containerEl)
       .setName('Automatic sprints')
-      .setDesc('Generate missing Base files and sprint notes, then roll incomplete tasks on the configured cadence.')
+      .setDesc('Generate missing base files and sprint notes, then roll incomplete tasks on the configured cadence.')
       .addToggle((toggle) => toggle
         .setValue(this.feature.settings.enabled)
         .onChange(async (enabled) => {
@@ -205,12 +232,11 @@ export class SprintSettingTab extends PluginSettingTab {
             return;
           }
           await this.mutateSettings((settings) => { settings.enabled = enabled; });
-          this.display();
+          this.refreshSettings();
         }));
+  }
 
-    this.renderDefaults(containerEl);
-    this.renderProfiles(containerEl);
-
+  private renderMaintenance(containerEl: HTMLElement): void {
     new Setting(containerEl)
       .setName('Synchronize now')
       .setDesc('Create missing sprint notes, update lifecycle statuses, and apply rollover rules.')
@@ -220,12 +246,14 @@ export class SprintSettingTab extends PluginSettingTab {
         .onClick(() => { void this.sync(); }));
 
     new Setting(containerEl)
-      .setName('Generate Bases')
-      .setDesc('Create missing Base files, dashboard notes, local AI instructions, and shared vault-root skills.')
+      .setName('Generate bases')
+      .setDesc('Create missing base files, dashboard notes, local AI instructions, and shared vault-root skills.')
       .addButton((button) => button
-        .setButtonText('Generate Bases')
+        .setButtonText('Generate bases')
         .onClick(() => { void this.generateBases(); }));
+  }
 
+  private renderAiSettings(containerEl: HTMLElement): void {
     this.renderAiSkills(containerEl);
 
     new Setting(containerEl)
@@ -241,10 +269,25 @@ export class SprintSettingTab extends PluginSettingTab {
         }));
   }
 
+  private sectionDefinition(
+    name: string,
+    aliases: string[],
+    render: (container: HTMLElement) => void,
+  ): SettingDefinitionItem {
+    return {
+      name,
+      aliases,
+      render: (setting, group): void => {
+        setting.settingEl.remove();
+        render(group.listEl);
+      },
+    };
+  }
+
   private renderAiSkills(container: HTMLElement): void {
     new Setting(container)
       .setName('AI skills')
-      .setDesc('Manage Sprint workflows shared by supported AI tools.')
+      .setDesc('Manage sprint workflows shared by supported AI tools.')
       .setHeading();
 
     new Setting(container)
@@ -267,7 +310,6 @@ export class SprintSettingTab extends PluginSettingTab {
 
     new Setting(container).setName('Sprint duration').addSlider((slider) => slider
       .setLimits(1, 8, 1)
-      .setDynamicTooltip()
       .setValue(defaults.durationWeeks)
       .onChange((value) => this.mutateSettings((settings) => {
         settings.defaults.durationWeeks = value;
@@ -291,7 +333,6 @@ export class SprintSettingTab extends PluginSettingTab {
 
     new Setting(container).setName('Future sprints').addSlider((slider) => slider
       .setLimits(1, 8, 1)
-      .setDynamicTooltip()
       .setValue(defaults.futureSprintCount)
       .onChange((value) => this.mutateSettings((settings) => {
         settings.defaults.futureSprintCount = value;
@@ -310,8 +351,8 @@ export class SprintSettingTab extends PluginSettingTab {
 
   private renderProfiles(container: HTMLElement): void {
     new Setting(container)
-      .setName('Sprint workspace')
-      .setDesc('The folder, Bases, and cadence managed by Sprint.')
+      .setName('Workspace')
+      .setDesc('The folder, bases, and cadence managed by this plugin.')
       .setHeading();
 
     const profile = this.feature.settings.profiles[0];
@@ -331,7 +372,7 @@ export class SprintSettingTab extends PluginSettingTab {
       .setHeading()
       .addExtraButton((button) => button
         .setIcon('rotate-ccw')
-        .setTooltip('Reset Sprint workspace')
+        .setTooltip('Reset sprint workspace')
         .onClick(() => {
           new ResetSprintProfileModal(
             this.app,
@@ -342,7 +383,7 @@ export class SprintSettingTab extends PluginSettingTab {
 
     new Setting(container)
       .setName('Workspace name')
-      .setDesc('A display label for this Sprint workspace. Changing it does not rename vault files.')
+      .setDesc('A display label for this sprint workspace. Changing it does not rename vault files.')
       .addText((text) => text
       .setValue(profile.name)
       .onChange((value) => mutate((target) => { target.name = value.trim(); })));
@@ -350,7 +391,7 @@ export class SprintSettingTab extends PluginSettingTab {
     let folderDraft = profile.rootFolder;
     new Setting(container)
       .setName('Sprint folder')
-      .setDesc('The vault folder containing this profile. Rename moves the existing folder and updates its configured Base paths.')
+      .setDesc('The vault folder containing this profile. Rename moves the existing folder and updates its configured base paths.')
       .addText((text) => text
         .setPlaceholder('Sprint')
         .setValue(profile.rootFolder)
@@ -449,7 +490,7 @@ export class SprintSettingTab extends PluginSettingTab {
       else delete settings.skillCustomInstructions[skill];
     });
     await this.generateBases();
-    this.display();
+    this.refreshSettings();
   }
 
   private async sync(): Promise<void> {
@@ -468,18 +509,18 @@ export class SprintSettingTab extends PluginSettingTab {
   private async enableAutomaticSprints(): Promise<void> {
     await this.mutateSettings((settings) => { settings.enabled = true; });
     await this.sync();
-    this.display();
+    this.refreshSettings();
   }
 
   private async resetProfile(profileId: string): Promise<void> {
     if (!this.feature.settings.enabled) {
-      new Notice('Enable automatic sprints before resetting the Sprint workspace.');
+      new Notice('Enable automatic sprints before resetting the sprint workspace.');
       return;
     }
     try {
       const result = await this.feature.resetProfile(profileId);
       new Notice(`Sprint workspace reset: ${result.created} sprints created.`);
-      this.display();
+      this.refreshSettings();
     } catch (error) {
       new Notice(error instanceof Error ? `Sprint workspace reset failed: ${error.message}` : 'Sprint workspace reset failed.');
     }
@@ -490,7 +531,7 @@ export class SprintSettingTab extends PluginSettingTab {
       await this.feature.renameProfileRoot(profileId, rootFolder);
       await this.feature.generateBases();
       new Notice(`Sprint folder renamed to ${rootFolder.trim()}.`);
-      this.display();
+      this.refreshSettings();
     } catch (error) {
       new Notice(error instanceof Error ? `Sprint folder rename failed: ${error.message}` : 'Sprint folder rename failed.');
     }
@@ -503,5 +544,9 @@ export class SprintSettingTab extends PluginSettingTab {
     } catch (error) {
       new Notice(error instanceof Error ? `Sprint Base generation failed: ${error.message}` : 'Sprint Base generation failed.');
     }
+  }
+
+  private refreshSettings(): void {
+    this.update();
   }
 }

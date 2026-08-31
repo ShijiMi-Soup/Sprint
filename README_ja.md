@@ -51,7 +51,7 @@ Sprint overviewカードには、前回、現在、次回のスプリントに�
 
 ## 必要環境
 
-- Obsidian 1.10.0以降
+- Obsidian 1.13.0以降
 - Obsidianのコアプラグイン「Bases」が有効であること
 
 ## インストール
