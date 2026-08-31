@@ -61,7 +61,7 @@ export class SprintFeature implements SprintFeatureApi {
       createSprintVelocityViewRegistration(() => this.currentSettings),
     );
     this.plugin.addSettingTab(new SprintSettingTab(this.plugin.app, this.plugin, this));
-    this.plugin.addRibbonIcon('calendar-range', 'Open sprint settings', () => {
+    this.plugin.addRibbonIcon('footprints', 'Open sprint settings', () => {
       this.openSettings();
     });
     this.plugin.addCommand({

@@ -10,6 +10,10 @@
 - Added native Due date metadata to generated tasks and a date input to the inline New task form.
 - Connected Kanban card fields to the native Bases Properties selector, including property ordering and migration of previous card-field settings.
 
+### Changed
+
+- Changed the left ribbon shortcut from a calendar to a running-footprints icon.
+
 ### Documentation
 
 - Added illustrated installation and first-time setup guides in English and Japanese.
