@@ -31,6 +31,7 @@ export interface SprintProfile {
 
 export interface SprintSettings {
   enabled: boolean;
+  onboardingComplete: boolean;
   supportSchemaVersion: number;
   generateVaultRootInstructions: boolean;
   skillCustomInstructions: Record<string, string>;

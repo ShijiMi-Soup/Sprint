@@ -24,39 +24,45 @@ This guide walks through installing Sprint from Obsidian Community plugins and c
 
    ![The installed Sprint plugin with the Enable button visible](images/installation/03-enable-plugin.png)
 
-4. Select **Options** to open Sprint's settings.
+4. Sprint opens a welcome prompt the first time it is enabled. Select **Set up Sprint**, review the workspace summary, then select **Create workspace**. Sprint enables Automatic sprints and creates the workspace for you.
 
-   ![The enabled Sprint plugin with the Options button visible](images/installation/04-open-options.png)
+   Select **Not now** if you do not want Sprint to create files. You can reopen the guide later from **Settings -> Sprint -> Setup guide**.
 
-## Create The Sprint Workspace
-
-5. Review the defaults before creating files. You can configure the sprint duration, start day, incomplete-task behavior, number of future sprints, naming pattern, and workspace location.
-
-   ![Sprint settings showing automatic sprints, global defaults, and workspace options](images/installation/05-review-settings.png)
-
-6. Turn on **Automatic sprints**. Sprint shows a confirmation dialog describing the files it will create. Select **Turn on** to continue.
-
-   ![Confirmation dialog explaining which files Automatic sprints will create](images/installation/06-confirm-automatic-sprints.png)
-
-7. Wait for the synchronization notice. It reports how many sprint notes were created and how many tasks were moved.
+5. Wait for the synchronization notice. It reports how many sprint notes were created and how many tasks were moved.
 
    ![Sprint settings with Automatic sprints enabled and a successful synchronization notice](images/installation/07-synchronization-complete.png)
 
-Sprint creates missing workspace files without replacing an existing Sprint workspace. Reinstalling the plugin does not recreate tutorial projects or tasks when the configured workspace folder already exists. The separate **Reset workspace** action is destructive and requires explicit confirmation.
+Sprint creates missing workspace files without replacing an existing Sprint workspace. When the configured folder already exists, the welcome prompt offers to use that workspace and does not recreate tutorial projects or tasks. The separate **Reset workspace** action is destructive and requires explicit confirmation.
+
+## Set Up Later
+
+If you selected **Not now**, configure Sprint manually:
+
+1. Open **Settings -> Community plugins**, select Sprint, then select **Options**.
+
+   ![The enabled Sprint plugin with the Options button visible](images/installation/04-open-options.png)
+
+2. Review the defaults. You can configure the sprint duration, start day, incomplete-task behavior, number of future sprints, naming pattern, and workspace location.
+
+   ![Sprint settings showing automatic sprints, global defaults, and workspace options](images/installation/05-review-settings.png)
+
+3. Turn on **Automatic sprints**. Sprint shows a confirmation dialog describing the files it will create. Select **Turn on** to continue.
+
+   ![Confirmation dialog explaining which files Automatic sprints will create](images/installation/06-confirm-automatic-sprints.png)
 
 ## Check The Result
 
-8. Return to the file explorer. The default `Sprint` folder contains task, sprint, and project folders; three Bases files; a Sprint Summary; and local AI instruction files.
+6. Return to the file explorer. The default `Sprint` folder contains task, sprint, and project folders; three Bases files; a Sprint Summary; and local AI instruction files.
 
    ![The generated Sprint workspace in the Obsidian file explorer](images/installation/08-generated-workspace.png)
 
    ![Close-up of the default files and folders inside the Sprint workspace](images/installation/09-workspace-files.png)
 
-9. Open `Sprint/Sprint Summary.md`, or run **Open Sprint Summary** from the command palette. The Current Tasks section shows the current-sprint Kanban board grouped by project.
+7. Open `Sprint/Sprint Summary.md`, or run **Open Sprint Summary** from the command palette. The Current Tasks section shows the current-sprint Kanban board grouped by project.
 
    ![Sprint Summary showing current tasks in project-grouped Kanban columns](images/installation/10-summary-current-tasks.png)
 
-10. Scroll down to review completed points in the Velocity chart and the current project list.
+8. Scroll down to review completed points in the Velocity chart and the current project list.
 
     ![Sprint Summary showing the Velocity chart](images/installation/11-summary-velocity.png)
 
@@ -78,4 +84,3 @@ If Sprint is unavailable in the Community plugins browser:
 - **No workspace files appear:** Open **Settings -> Sprint** and make sure **Automatic sprints** is enabled.
 - **The board does not render:** Open **Settings -> Core plugins** and enable **Bases**.
 - **You installed files manually but Sprint is missing:** Confirm that `main.js`, `manifest.json`, and `styles.css` are directly inside `.obsidian/plugins/sprint/`, then reload Obsidian.
-

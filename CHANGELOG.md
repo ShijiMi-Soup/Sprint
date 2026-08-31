@@ -2,6 +2,12 @@
 
 ## 0.1.3 - 2026-08-31
 
+### Added
+
+- Added a two-step first-run setup prompt that can enable automatic sprints and create the workspace when the plugin is first enabled.
+- Detects existing Sprint workspaces during onboarding and connects without recreating tutorial projects or tasks.
+- Added a settings action for reopening the setup guide after it is dismissed.
+
 ### Documentation
 
 - Added illustrated installation and first-time setup guides in English and Japanese.

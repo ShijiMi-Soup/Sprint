@@ -55,6 +55,7 @@ class MemorySprintVault implements SprintVault {
 function settings(overrides: Partial<SprintSettings> = {}): SprintSettings {
   return {
     enabled: true,
+    onboardingComplete: true,
     supportSchemaVersion: 1,
     generateVaultRootInstructions: false,
     skillCustomInstructions: {},

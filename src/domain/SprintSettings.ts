@@ -17,6 +17,7 @@ export interface ResolvedSprintProfile extends SprintDefaults {
 
 interface LegacySprintSettings {
   enabled?: boolean;
+  onboardingComplete?: boolean;
   generateVaultRootInstructions?: boolean;
   skillCustomInstructions?: Record<string, string>;
   rootFolder?: string;
@@ -81,9 +82,11 @@ export function normalizeSprintSettings(value: unknown): SprintSettings {
     ? value as Record<string, unknown>
     : {};
   const legacy = input as LegacySprintSettings;
+  const hasStoredSettings = Object.keys(input).length > 0;
   if (!input.defaults || !Array.isArray(input.profiles)) {
     return {
       enabled: legacy.enabled ?? false,
+      onboardingComplete: legacy.onboardingComplete ?? hasStoredSettings,
       supportSchemaVersion: 0,
       generateVaultRootInstructions: legacy.generateVaultRootInstructions ?? false,
       skillCustomInstructions: normalizeSkillInstructions(legacy.skillCustomInstructions),
@@ -109,6 +112,9 @@ export function normalizeSprintSettings(value: unknown): SprintSettings {
   };
   return {
     enabled: typeof input.enabled === 'boolean' ? input.enabled : false,
+    onboardingComplete: typeof input.onboardingComplete === 'boolean'
+      ? input.onboardingComplete
+      : true,
     supportSchemaVersion: typeof input.supportSchemaVersion === 'number'
       ? Math.max(0, Math.floor(input.supportSchemaVersion))
       : 0,

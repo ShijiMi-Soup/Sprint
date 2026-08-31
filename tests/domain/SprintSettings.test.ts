@@ -14,6 +14,16 @@ describe('SprintSettings', () => {
       samplesInitialized: false,
     }));
     expect(settings.supportSchemaVersion).toBe(0);
+    expect(settings.onboardingComplete).toBe(false);
+  });
+
+  it('prompts only new installs while treating existing settings as onboarded', () => {
+    expect(normalizeSprintSettings({ rootFolder: 'Sprint' }).onboardingComplete).toBe(true);
+    expect(normalizeSprintSettings({
+      onboardingComplete: false,
+      defaults: {},
+      profiles: [],
+    }).onboardingComplete).toBe(false);
   });
 
   it('normalizes the installed support schema version', () => {

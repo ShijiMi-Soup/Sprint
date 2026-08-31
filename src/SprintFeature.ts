@@ -11,6 +11,7 @@ import {
   SPRINT_VELOCITY_VIEW_TYPE,
 } from './obsidian/SprintBasesView';
 import { ObsidianSprintVault } from './obsidian/ObsidianSprintVault';
+import { SprintOnboardingModal } from './obsidian/SprintOnboardingModal';
 import { SprintSettingTab } from './obsidian/SprintSettingTab';
 import {
   PluginDataSprintSettingsStore,
@@ -23,6 +24,7 @@ export interface SprintFeatureApi {
   generateBases(): Promise<SprintBaseGenerationResult>;
   resetProfile(profileId: string): Promise<SprintSyncResult>;
   renameProfileRoot(profileId: string, rootFolder: string): Promise<void>;
+  openOnboarding(): void;
   updateSettings(mutation: (settings: SprintSettings) => void): Promise<void>;
 }
 
@@ -77,6 +79,7 @@ export class SprintFeature implements SprintFeatureApi {
       name: 'Open summary',
       callback: () => { void this.openAgilePm(); },
     });
+    this.scheduleOnboarding();
     this.scheduleSync();
   }
 
@@ -202,6 +205,52 @@ export class SprintFeature implements SprintFeatureApi {
     };
     this.mutationTail = this.mutationTail.then(run, run);
     return this.mutationTail;
+  }
+
+  openOnboarding(): void {
+    const profile = this.currentSettings.profiles[0];
+    if (!profile) return;
+    const rootFolder = profile.rootFolder.trim().replace(/^\/+|\/+$/g, '') || 'Sprint';
+    const existingWorkspace = Boolean(
+      this.plugin.app.vault.getAbstractFileByPath(rootFolder),
+    );
+    new SprintOnboardingModal(
+      this.plugin.app,
+      {
+        rootFolder,
+        durationWeeks: profile.overrides.durationWeeks
+          ?? this.currentSettings.defaults.durationWeeks,
+        futureSprintCount: profile.overrides.futureSprintCount
+          ?? this.currentSettings.defaults.futureSprintCount,
+        existingWorkspace,
+      },
+      {
+        onSetup: (): Promise<void> => this.completeOnboarding(true),
+        onDismiss: (): Promise<void> => this.completeOnboarding(false),
+      },
+    ).open();
+  }
+
+  private async completeOnboarding(enableAutomaticSprints: boolean): Promise<void> {
+    await this.updateSettings((settings) => {
+      settings.onboardingComplete = true;
+      if (enableAutomaticSprints) settings.enabled = true;
+    });
+    if (!enableAutomaticSprints) return;
+    try {
+      const result = await this.sync();
+      new Notice(`Sprint workspace ready: ${result.created} sprints created.`);
+    } catch (error) {
+      new Notice(error instanceof Error
+        ? `Sprint setup failed: ${error.message}`
+        : 'Sprint setup failed.');
+    }
+  }
+
+  private scheduleOnboarding(): void {
+    this.plugin.app.workspace.onLayoutReady(() => {
+      if (!this.currentSettings.onboardingComplete) this.openOnboarding();
+    });
   }
 
   private scheduleSync(): void {

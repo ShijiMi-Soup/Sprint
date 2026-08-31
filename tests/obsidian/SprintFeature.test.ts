@@ -2,9 +2,55 @@ import type { Plugin } from 'obsidian';
 
 import { normalizeSprintSettings } from '@/domain/SprintSettings';
 import { SprintFeature } from '@/SprintFeature';
+import { SprintOnboardingModal } from '@/obsidian/SprintOnboardingModal';
 import type { SprintSettingsStore } from '@/obsidian/SprintSettingsStore';
 
 describe('SprintFeature', () => {
+  it('opens onboarding after layout only for a new installation', async () => {
+    Object.defineProperty(globalThis, 'window', {
+      configurable: true,
+      value: { setInterval: jest.fn(() => 1) },
+    });
+    const open = jest.spyOn(SprintOnboardingModal.prototype, 'open').mockImplementation();
+    const host = {
+      app: {
+        fileManager: {},
+        metadataCache: {},
+        vault: {
+          getAbstractFileByPath: jest.fn(() => null),
+          getFileByPath: jest.fn(),
+        },
+        workspace: {
+          onLayoutReady: jest.fn((callback: () => void) => { callback(); }),
+        },
+      },
+      manifest: { id: 'host' },
+      addCommand: jest.fn(),
+      addRibbonIcon: jest.fn(),
+      addSettingTab: jest.fn(),
+      registerBasesView: jest.fn(),
+      registerInterval: jest.fn(),
+    } as unknown as Plugin;
+    const newInstallStore: SprintSettingsStore = {
+      load: jest.fn().mockResolvedValue(normalizeSprintSettings(undefined)),
+      save: jest.fn().mockResolvedValue(undefined),
+    };
+
+    await new SprintFeature(host, newInstallStore).load();
+
+    expect(open).toHaveBeenCalledTimes(1);
+    open.mockClear();
+
+    const existingInstallStore: SprintSettingsStore = {
+      load: jest.fn().mockResolvedValue(normalizeSprintSettings({ rootFolder: 'Sprint' })),
+      save: jest.fn().mockResolvedValue(undefined),
+    };
+    await new SprintFeature(host, existingInstallStore).load();
+
+    expect(open).not.toHaveBeenCalled();
+    open.mockRestore();
+  });
+
   it('registers with a host plugin and persists ordered settings updates', async () => {
     Object.defineProperty(globalThis, 'window', {
       configurable: true,

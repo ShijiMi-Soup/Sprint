@@ -56,7 +56,7 @@ Sprint overview cards show the last, current, and next sprint with dates, comple
 
 ## Installation
 
-In Obsidian, open **Settings -> Community plugins -> Browse**, search for **Sprint** by **shijimi-soup**, then install and enable it. Open Sprint's **Options** and turn on **Automatic sprints** to create the workspace.
+In Obsidian, open **Settings -> Community plugins -> Browse**, search for **Sprint** by **shijimi-soup**, then install and enable it. In the welcome prompt, select **Set up Sprint** and confirm the workspace creation.
 
 For screenshots and the complete first-time setup, see the [English installation guide](docs/INSTALLATION.md) or [Japanese installation guide](docs/INSTALLATION_ja.md).
 
@@ -90,7 +90,7 @@ For screenshots and the complete first-time setup, see the [English installation
 
 1. Open **Settings -> Sprint**.
 2. Review the Sprint folder, cadence anchor, duration, start day, and rollover settings.
-3. Turn on **Automatic sprints** and confirm the file-creation warning.
+3. If you skipped the first-run setup, turn on **Automatic sprints** and confirm the file-creation warning.
 4. Open the command palette and run **Open Sprint Summary**.
 
 The first initialization creates tutorial projects and tasks to demonstrate the workflow. They are created only once. Deleting them later does not cause them to reappear on startup.

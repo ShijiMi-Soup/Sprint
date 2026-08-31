@@ -453,6 +453,16 @@ export class SprintSettingTab extends PluginSettingTab {
   private maintenanceDefinitions(): SettingDefinition[] {
     return [
       this.renderDefinition(
+        'Setup guide',
+        ['welcome', 'onboarding', 'first run'],
+        (setting) => {
+          setting.addButton((button) => button
+            .setButtonText('Open setup')
+            .onClick(() => { this.feature.openOnboarding(); }));
+        },
+        'Open the guided Sprint workspace setup again.',
+      ),
+      this.renderDefinition(
         'Synchronize now',
         ['sync', 'sprints'],
         (setting) => {
