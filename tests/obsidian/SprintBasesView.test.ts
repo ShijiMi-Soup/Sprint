@@ -8,9 +8,12 @@ import {
   getCardTaskProperties,
   getEstimateTone,
   getEditableTaskProperties,
+  getNewTaskSprintScope,
   getSprintBasesOptions,
   getTaskProjectGroup,
   openProjectNote,
+  parseTaskPropertyValue,
+  resolveTaskPropertyType,
   selectRecentVelocityPoints,
 } from '@/obsidian/SprintBasesView';
 
@@ -22,18 +25,6 @@ describe('SprintBasesView', () => {
       expect.objectContaining({ key: 'sprintProfile', type: 'dropdown' }),
       expect.objectContaining({ key: 'layout', type: 'dropdown' }),
       expect.objectContaining({ key: 'showCompleted', type: 'toggle' }),
-      expect.objectContaining({
-        type: 'group',
-        displayName: 'New task form',
-        items: expect.arrayContaining([
-          expect.objectContaining({ key: 'newTaskProperty1', type: 'property' }),
-          expect.objectContaining({
-            key: 'newTaskProperty2',
-            type: 'property',
-            default: 'note.due',
-          }),
-        ]),
-      }),
     ]));
     expect(getSprintBasesOptions(settings)).toEqual(expect.arrayContaining([
       expect.objectContaining({
@@ -43,10 +34,60 @@ describe('SprintBasesView', () => {
     ]));
   });
 
-  it('normalizes the properties shown in the new-task composer', () => {
-    expect(getEditableTaskProperties(['note.estimate', 'due', 'estimate', 'project']))
-      .toEqual(['estimate', 'due']);
+  it('uses the native Properties order for editable new-task fields', () => {
+    expect(getEditableTaskProperties([
+      'file.name',
+      'formula.task_state',
+      'note.due',
+      'note.project',
+      'note.sprint',
+      'note.estimate',
+      'note.archived',
+      'note.custom field',
+    ], ['note.priority'])).toEqual([
+      'due',
+      'sprint',
+      'estimate',
+      'custom field',
+    ]);
+    expect(getEditableTaskProperties(
+      ['note.estimate', 'note.sprint', 'note.due'],
+      undefined,
+      'current',
+    )).toEqual(['estimate', 'due']);
+    expect(getEditableTaskProperties(undefined, ['note.priority', 'note.due']))
+      .toEqual(['priority', 'due']);
     expect(getEditableTaskProperties(undefined)).toEqual(['estimate', 'due']);
+  });
+
+  it('resolves registered Obsidian property types and safely falls back to text', () => {
+    expect(resolveTaskPropertyType('estimate', 'text')).toBe('number');
+    expect(resolveTaskPropertyType('custom date', 'date')).toBe('date');
+    expect(resolveTaskPropertyType('custom datetime', 'datetime')).toBe('datetime');
+    expect(resolveTaskPropertyType('custom toggle', 'checkbox')).toBe('checkbox');
+    expect(resolveTaskPropertyType('custom list', 'multitext')).toBe('list');
+    expect(resolveTaskPropertyType('custom tags', 'tags')).toBe('tags');
+    expect(resolveTaskPropertyType('custom link', 'link')).toBe('link');
+    expect(resolveTaskPropertyType('unknown custom property', 'unsupported')).toBe('text');
+  });
+
+  it.each([
+    ['text', 'Read chapter', 'Read chapter'],
+    ['number', '3.5', 3.5],
+    ['checkbox', true, true],
+    ['date', '2026-09-04', '2026-09-04'],
+    ['datetime', '2026-09-04T09:30', '2026-09-04T09:30'],
+    ['list', 'research, write\nsubmit', ['research', 'write', 'submit']],
+    ['tags', 'class, urgent', ['class', 'urgent']],
+    ['link', 'Sprint 2', ['[[Sprint 2]]']],
+  ] as const)('serializes %s form values for frontmatter', (type, input, expected) => {
+    expect(parseTaskPropertyValue(type, input)).toEqual(expected);
+  });
+
+  it('uses no sprint by default on the full board and scopes Current/Next boards', () => {
+    expect(getNewTaskSprintScope(undefined)).toBeNull();
+    expect(getNewTaskSprintScope('current')).toBe('current');
+    expect(getNewTaskSprintScope('next')).toBe('next');
   });
 
   it('uses the native Properties order for task-card metadata', () => {
@@ -85,6 +126,37 @@ describe('SprintBasesView', () => {
       estimate: 3,
       due: '2026-09-04',
     });
+  });
+
+  it('keeps an explicitly selected sprint on the full Sprint board', () => {
+    const frontmatter: Record<string, unknown> = {};
+
+    applyNewTaskFrontmatter(
+      frontmatter,
+      'Not started',
+      'Sprint/Projects/Research',
+      null,
+      { sprint: ['[[Sprint/Sprints/Sprint 3]]'], estimate: 2 },
+    );
+
+    expect(frontmatter.sprint).toEqual(['[[Sprint/Sprints/Sprint 3]]']);
+  });
+
+  it.each([
+    ['current', 'Sprint/Sprints/Sprint 1'],
+    ['next', 'Sprint/Sprints/Sprint 2'],
+  ] as const)('makes the %s board sprint assignment take precedence', (_scope, sprint) => {
+    const frontmatter: Record<string, unknown> = {};
+
+    applyNewTaskFrontmatter(
+      frontmatter,
+      'Not started',
+      null,
+      sprint,
+      { sprint: ['[[Sprint/Sprints/Incorrect sprint]]'] },
+    );
+
+    expect(frontmatter.sprint).toEqual([`[[${sprint}]]`]);
   });
 
   it('adds a blank Due date to new tasks when one is not entered', () => {

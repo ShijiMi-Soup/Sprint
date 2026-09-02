@@ -3,8 +3,7 @@
 This reference describes the workspace, data model, generated files, views, and
 maintenance operations provided by the Sprint Obsidian plugin.
 
-For installation, see the [installation guide](INSTALLATION.md). For planned
-work, see [TODO](TODO.md).
+For installation, see the [installation guide](INSTALLATION.md).
 
 ## General terms
 
@@ -195,10 +194,17 @@ property badge. Estimate and Due are visible by default. The full Sprint board
 also shows Sprint by default; Current and Next sprint views omit it because the
 scope is already known. Each Base view stores its own selection.
 
-The view options also contain a **New task form** group. Sprint currently
-supports up to three editable note properties there and defaults the first two
-to Estimate and Due. Project, sprint, and state are supplied by the lane where
-the form was opened.
+The inline **New task** form uses the same visible editable note properties, in
+the same order. It supports text, number, checkbox, date, date-time, list, tag,
+and link values. Formula, file, title, project, state, and archive properties
+are excluded because Sprint or Obsidian controls them.
+
+Project and state are supplied by the lane where the form was opened. A task
+created in **Current sprint** is assigned to the current sprint, and one created
+in **Next sprint** is assigned to the next sprint. The full **Sprint board**
+does not assign a sprint automatically; when Sprint is visible in that view's
+Properties selection, the form provides a sprint selector and defaults to
+**No sprint**.
 
 ## Rename the Sprint workspace
 
@@ -208,22 +214,24 @@ Use **Settings -> Sprint -> Workspace -> Sprint folder**, enter the new path,
 then select **Rename**. Sprint moves the existing folder and updates the Tasks,
 Sprints, and Projects Base paths in its saved settings.
 
-### Manual rename
+### Manual rename and missing workspaces
 
-Sprint does not currently detect a folder renamed in the file explorer, by
-another plugin, or while Obsidian is closed. Its saved configuration continues
-to point to the old path. A later synchronization may create missing support
-folders at that old path.
+When a workspace or one of its ancestor folders is renamed while Obsidian and
+Sprint are running, Sprint follows the vault rename event and updates the saved
+workspace and Base paths without scanning the vault.
 
-If the folder has already been renamed manually:
+If the configured workspace is missing when Sprint starts, automatic
+synchronization pauses instead of recreating the old path. Sprint asks once per
+Obsidian launch how to recover it. You can:
 
-1. Turn off **Automatic sprints** before running another synchronization.
-2. Rename the folder back to the configured path.
-3. Use the supported **Sprint folder -> Rename** action.
-4. Turn **Automatic sprints** on again and run **Sprint: Sync**.
+- enter the moved folder's vault-relative path and select **Locate workspace**;
+- select **Create new workspace**, then complete the separate confirmation to
+  create support files and sprint notes without tutorial tasks; or
+- select **Not now** and leave the vault unchanged until the next launch.
 
-Do not reset the workspace to repair a rename; reset deletes the configured
-workspace. Automatic manual-rename detection is tracked in [TODO](TODO.md).
+Running Sync, Generate bases, Open summary, or Reset opens the recovery prompt
+again. Do not reset the workspace to repair a rename; reset deletes the
+configured workspace.
 
 ## Reset the Sprint workspace
 
@@ -249,11 +257,3 @@ run **Sprint: Generate bases** and then **Sprint: Sync**.
 | Sprint: Open summary | Opens the configured `Sprint Summary.md`. |
 | Sprint: Sync | Creates missing sprint notes, updates lifecycle statuses, and applies rollover. |
 | Sprint: Generate bases | Creates missing support files and applies managed Base schema migrations. |
-
-## Documentation maintenance
-
-The repository's [documentation maintenance guide](DOCUMENTATION_MAINTENANCE.md)
-defines which files must be reviewed for every user-visible change. The root
-`AGENTS.md` gives the same requirement to coding agents. This is more reliable
-than a separate optional skill because the instruction travels with every clone
-and applies before code is changed.

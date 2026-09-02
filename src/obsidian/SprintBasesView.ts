@@ -45,14 +45,15 @@ export function applyNewTaskFrontmatter(
   state: TaskBoardState,
   projectTarget: string | null,
   sprintTarget: string | null,
-  properties: Record<string, string | number | null>,
+  properties: Record<string, unknown>,
 ): void {
   applyTaskBoardState(frontmatter, state);
   if (frontmatter.archived === undefined) frontmatter.archived = false;
   if (frontmatter.due === undefined && properties.due === undefined) frontmatter.due = null;
   if (projectTarget) frontmatter.project = [`[[${projectTarget}]]`];
-  if (sprintTarget) frontmatter.sprint = [`[[${sprintTarget}]]`];
   Object.assign(frontmatter, properties);
+  // Scoped boards own sprint assignment, even when a legacy form setting exists.
+  if (sprintTarget) frontmatter.sprint = [`[[${sprintTarget}]]`];
 }
 
 export function getTaskProjectGroup(
@@ -103,20 +104,6 @@ export function getSprintBasesOptions(
       displayName: 'Show completed tasks',
       default: true,
     },
-    {
-      type: 'group',
-      displayName: 'New task form',
-      items: [1, 2, 3].map((position) => ({
-        key: `newTaskProperty${position}`,
-        type: 'property' as const,
-        displayName: `Property ${position}`,
-        default: position === 1
-          ? 'note.estimate'
-          : position === 2 ? 'note.due' : undefined,
-        placeholder: position === 1 ? 'Estimate' : position === 2 ? 'Due' : 'None',
-        filter: isEditableTaskProperty,
-      })),
-    },
   ];
 }
 
@@ -139,29 +126,88 @@ export function getCardTaskProperties(
   )))];
 }
 
-function isEditableTaskProperty(property: BasesPropertyId): boolean {
-  return property.startsWith('note.') && ![
-    'note.project',
-    'note.sprint',
-    'note.in progress',
-    'note.is done',
-    'note.archived',
-  ].includes(property);
+const TASK_FORM_EXCLUDED_PROPERTIES = new Set([
+  'project',
+  'in progress',
+  'is done',
+  'archived',
+]);
+
+export type TaskPropertyType = 'text' | 'number' | 'checkbox' | 'date' | 'datetime' | 'list' | 'tags' | 'link';
+
+const DEFAULT_TASK_PROPERTY_TYPES: Record<string, TaskPropertyType> = {
+  estimate: 'number',
+  priority: 'number',
+  due: 'date',
+  'due date': 'date',
+  archived: 'checkbox',
+  'in progress': 'checkbox',
+  'is done': 'checkbox',
+  project: 'link',
+  sprint: 'link',
+};
+
+export function getEditableTaskProperties(
+  order: unknown,
+  legacyProperties?: unknown,
+  sprintScope?: unknown,
+): string[] {
+  const source = Array.isArray(order) ? order : legacyProperties;
+  if (!Array.isArray(source)) return ['estimate', 'due'];
+  const scoped = sprintScope === 'current' || sprintScope === 'next';
+  return [...new Set(source
+    .filter((entry): entry is string => typeof entry === 'string' && entry.startsWith('note.'))
+    .map((entry) => entry.trim().replace(/^note\./, ''))
+    .filter((entry) => entry.length > 0 && !TASK_FORM_EXCLUDED_PROPERTIES.has(entry))
+    .filter((entry) => !scoped || entry !== 'sprint'))];
 }
 
-export function getEditableTaskProperties(value: unknown): string[] {
-  if (!Array.isArray(value)) return ['estimate', 'due'];
-  return [...new Set(value
-    .filter((entry): entry is string => typeof entry === 'string')
-    .map((entry) => entry.trim().replace(/^note\./, ''))
-    .filter((entry) => entry.length > 0 && ![
-      'project',
-      'sprint',
-      'in progress',
-      'is done',
-      'archived',
-    ].includes(entry)))];
+export function resolveTaskPropertyType(
+  property: string,
+  registeredType: unknown,
+): TaskPropertyType {
+  if (property in DEFAULT_TASK_PROPERTY_TYPES) return DEFAULT_TASK_PROPERTY_TYPES[property]!;
+  switch (registeredType) {
+    case 'number': return 'number';
+    case 'checkbox': return 'checkbox';
+    case 'date': return 'date';
+    case 'datetime': return 'datetime';
+    case 'multitext':
+    case 'list': return 'list';
+    case 'tags': return 'tags';
+    case 'link': return 'link';
+    default: return 'text';
+  }
 }
+
+export function parseTaskPropertyValue(
+  type: TaskPropertyType,
+  value: string | boolean,
+): unknown {
+  if (type === 'checkbox') return value === true;
+  if (typeof value !== 'string') return undefined;
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+  if (type === 'number') {
+    const number = Number(trimmed);
+    return Number.isFinite(number) ? number : undefined;
+  }
+  if (type === 'list' || type === 'tags') {
+    const values = trimmed.split(/[\n,]/).map((entry) => entry.trim()).filter(Boolean);
+    return values.length > 0 ? values : undefined;
+  }
+  if (type === 'link') return [`[[${trimmed.replace(/^\[\[|\]\]$/g, '')}]]`];
+  return trimmed;
+}
+
+export function getNewTaskSprintScope(configuredScope: unknown): 'current' | 'next' | null {
+  return configuredScope === 'current' || configuredScope === 'next' ? configuredScope : null;
+}
+
+type NewTaskPropertyInput = {
+  type: TaskPropertyType;
+  input: HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement;
+};
 
 function sprintReferences(value: unknown, sprintName: string): boolean {
   const values = Array.isArray(value) ? value : [value];
@@ -497,27 +543,11 @@ class SprintBasesView extends BasesView {
       cls: 'sprint-bases-new-task-name',
       attr: { type: 'text', placeholder: 'Task name', 'aria-label': 'Task name' },
     });
-    const propertyInputs = new Map<string, HTMLInputElement>();
-    const configuredProperties = [1, 2, 3]
+    const fields = form.createDiv({ cls: 'sprint-bases-new-task-fields' });
+    let propertyInputs = new Map<string, NewTaskPropertyInput>();
+    const legacyProperties = [1, 2, 3]
       .map((position) => this.config.getAsPropertyId(`newTaskProperty${position}`))
       .filter((property): property is BasesPropertyId => property !== null);
-    for (const property of getEditableTaskProperties(configuredProperties)) {
-      const propertyId: `note.${string}` = `note.${property}`;
-      const field = form.createDiv({ cls: 'sprint-bases-new-task-field' });
-      const fieldIcon = field.createSpan({ cls: 'sprint-bases-new-task-field-icon' });
-      setIcon(fieldIcon, property === 'due' || property === 'due date' ? 'calendar' : 'circle-gauge');
-      const input = field.createEl('input', {
-        attr: {
-          type: property === 'due' || property === 'due date'
-            ? 'date'
-            : property === 'estimate' || property === 'priority' ? 'number' : 'text',
-          placeholder: this.config.getDisplayName(propertyId),
-          'aria-label': this.config.getDisplayName(propertyId),
-          ...(property === 'estimate' || property === 'priority' ? { min: '0', step: '1' } : {}),
-        },
-      });
-      propertyInputs.set(property, input);
-    }
     const actions = form.createDiv({ cls: 'sprint-bases-new-task-actions' });
     const cancel = actions.createEl('button', { text: 'Cancel', attr: { type: 'button' } });
     const create = actions.createEl('button', {
@@ -538,6 +568,20 @@ class SprintBasesView extends BasesView {
       form.hidden = false;
       button.setAttribute('aria-expanded', 'true');
       nameInput.focus();
+      create.disabled = true;
+      void this.getTaskPropertyTypes().then((propertyTypes) => {
+        if (form.hidden) return;
+        const nativeOrder = this.config.getOrder();
+        const properties = getEditableTaskProperties(
+          nativeOrder.length > 0 ? nativeOrder : undefined,
+          legacyProperties,
+          this.config.get('sprintScope'),
+        );
+        propertyInputs = this.renderNewTaskFields(fields, properties, propertyTypes, profile.rootFolder);
+        create.disabled = false;
+      }).catch(() => {
+        create.disabled = false;
+      });
     });
     cancel.addEventListener('click', close);
     form.addEventListener('keydown', (event) => {
@@ -566,7 +610,7 @@ class SprintBasesView extends BasesView {
     state: TaskBoardState,
     projectTarget: string | null,
     rootFolder: string,
-    propertyInputs: Map<string, HTMLInputElement>,
+    propertyInputs: Map<string, NewTaskPropertyInput>,
   ): Promise<void> {
     const folder = normalizePath(`${rootFolder}/Tasks`).replace(/^\/+/, '');
     const safeName = name.replace(/[\\/:*?"<>|]/g, '-').replace(/\.+$/g, '').trim();
@@ -585,11 +629,13 @@ class SprintBasesView extends BasesView {
     try {
       file = await this.app.vault.create(path, '');
       const sprint = this.getSprintForNewTask(rootFolder);
-      const properties: Record<string, string | number | null> = {};
-      for (const [property, input] of propertyInputs) {
-        const value = input.value.trim();
-        if (!value) continue;
-        properties[property] = input.type === 'number' ? Number(value) : value;
+      const properties: Record<string, unknown> = {};
+      for (const [property, field] of propertyInputs) {
+        const rawValue = field.input instanceof HTMLInputElement && field.input.type === 'checkbox'
+          ? field.input.checked
+          : field.input.value;
+        const value = parseTaskPropertyValue(field.type, rawValue);
+        if (value !== undefined) properties[property] = value;
       }
       await this.app.fileManager.processFrontMatter(file, (frontmatter) => {
         applyNewTaskFrontmatter(
@@ -610,11 +656,81 @@ class SprintBasesView extends BasesView {
   }
 
   private getSprintForNewTask(rootFolder: string): string | null {
-    const configuredScope = this.config.get('sprintScope');
-    const scope = configuredScope === 'next' ? 'next' : 'current';
+    const scope = getNewTaskSprintScope(this.config.get('sprintScope'));
+    if (!scope) return null;
     const sprint = this.filesIn(`${rootFolder.replace(/^\/+|\/+$/g, '')}/Sprints`)
       .find((file) => this.app.metadataCache.getFileCache(file)?.frontmatter?.['sprint status'] === scope);
     return sprint?.path.replace(/\.md$/, '') ?? null;
+  }
+
+  private async getTaskPropertyTypes(): Promise<Record<string, unknown>> {
+    const path = normalizePath(`${this.app.vault.configDir}/types.json`);
+    try {
+      if (!await this.app.vault.adapter.exists(path)) return {};
+      const parsed: unknown = JSON.parse(await this.app.vault.adapter.read(path));
+      if (typeof parsed !== 'object' || parsed === null) return {};
+      const types = (parsed as Record<string, unknown>).types;
+      return typeof types === 'object' && types !== null
+        ? types as Record<string, unknown>
+        : {};
+    } catch {
+      return {};
+    }
+  }
+
+  private renderNewTaskFields(
+    container: HTMLElement,
+    properties: string[],
+    propertyTypes: Record<string, unknown>,
+    rootFolder: string,
+  ): Map<string, NewTaskPropertyInput> {
+    container.empty();
+    const inputs = new Map<string, NewTaskPropertyInput>();
+    for (const property of properties) {
+      const propertyId: `note.${string}` = `note.${property}`;
+      const type = resolveTaskPropertyType(property, propertyTypes[property]);
+      const field = container.createDiv({ cls: 'sprint-bases-new-task-field' });
+      const fieldIcon = field.createSpan({ cls: 'sprint-bases-new-task-field-icon' });
+      setIcon(fieldIcon, type === 'date' || type === 'datetime' ? 'calendar' : type === 'checkbox' ? 'check-square' : type === 'link' ? 'link' : 'circle-gauge');
+      const label = this.config.getDisplayName(propertyId);
+      let input: HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement;
+      if (type === 'checkbox') {
+        const checkboxLabel = field.createEl('label', { cls: 'sprint-bases-new-task-checkbox' });
+        input = checkboxLabel.createEl('input', {
+          attr: { type: 'checkbox', 'aria-label': label },
+        });
+        checkboxLabel.createSpan({ text: label });
+      } else if (type === 'link' && property === 'sprint') {
+        const select = field.createEl('select', { attr: { 'aria-label': label } });
+        select.createEl('option', { text: 'No sprint', value: '' });
+        for (const sprint of this.filesIn(`${rootFolder.replace(/^\/+|\/+$/g, '')}/Sprints`)) {
+          select.createEl('option', {
+            text: sprint.basename,
+            value: sprint.path.replace(/\.md$/, ''),
+          });
+        }
+        input = select;
+      } else if (type === 'list' || type === 'tags') {
+        input = field.createEl('textarea', {
+          attr: {
+            rows: '2',
+            placeholder: type === 'tags' ? `${label} (comma separated)` : `${label} (comma separated)`,
+            'aria-label': label,
+          },
+        });
+      } else {
+        input = field.createEl('input', {
+          attr: {
+            type: type === 'date' ? 'date' : type === 'datetime' ? 'datetime-local' : type === 'number' ? 'number' : 'text',
+            placeholder: label,
+            'aria-label': label,
+            ...(type === 'number' ? { step: 'any' } : {}),
+          },
+        });
+      }
+      inputs.set(property, { type, input });
+    }
+    return inputs;
   }
 
   private getReferenceTarget(value: unknown): string | null {

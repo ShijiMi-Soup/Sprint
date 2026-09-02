@@ -14,7 +14,7 @@
 
 ## Workspace relocation
 
-- [ ] Detect or safely recover from a Sprint workspace folder renamed outside the
+- [x] Detect or safely recover from a Sprint workspace folder renamed outside the
   Sprint settings UI. While Obsidian is running, prefer the vault rename event to
   update the configured workspace and Base paths without scanning every vault file.
   For renames performed while Obsidian is closed or the plugin is disabled, provide an
@@ -57,11 +57,19 @@
   and existing sprint notes. Support drag-and-drop reassignment without changing task
   state, show useful capacity or estimate totals, preserve project relationships, and
   confirm behavior for unassigned, archived, and completed tasks before implementation.
+- [ ] Optionally derive a task's Sprint assignment from its Due date. Match the due date
+  to the sprint whose date range contains it, create the required sprint note when that
+  range has not been generated yet, and define how manual Sprint assignments, cleared
+  due dates, disabled automatic sprints, and out-of-cadence dates should behave before
+  enabling automation.
 - [x] Integrate the native Base **Properties** selector with the custom Kanban views so
   users can choose which task properties appear on cards. Changes should apply to Sprint
   board, Current sprint, and Next sprint views as appropriate, preserve property order,
   avoid duplicating the task title, and continue to use sensible defaults for newly
   generated Bases.
+- [ ] Let users order project sections in Sprint Kanban views by a selected project
+  property, such as Priority. Define ascending/descending order, missing values,
+  deterministic tie-breaking, hidden projects, and per-view versus shared settings.
 
 ## Localization
 

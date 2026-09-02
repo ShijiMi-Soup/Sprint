@@ -319,8 +319,8 @@ describe('SprintBaseGenerator', () => {
     expect(written.get('.claude/skills/sprint/SKILL.md')).toContain('Use Fibonacci estimates only.');
     const tasksBase = written.get('Agile PM/Tasks.base') ?? '';
     expect(tasksBase.indexOf('name: "Sprint board"')).toBeLessThan(tasksBase.indexOf('name: "Tasks"'));
-    expect(tasksBase).toContain('newTaskProperty1: note.estimate');
-    expect(tasksBase).toContain('newTaskProperty2: note.due');
+    expect(tasksBase).not.toContain('newTaskProperty1:');
+    expect(tasksBase).not.toContain('newTaskProperty2:');
     expect(tasksBase).toContain('      - note.estimate');
     expect(tasksBase).toContain('      - note.sprint');
     expect(tasksBase).toContain('note.due:');
@@ -363,6 +363,7 @@ describe('SprintBaseGenerator', () => {
       '    layout: kanban',
       '    cardProperty1: note.custom',
       '    cardProperty2: note.sprint',
+      '    newTaskProperty1: note.custom',
       '    customSetting: keep-me',
       '  - type: table',
       '    name: Tasks',
@@ -404,8 +405,7 @@ describe('SprintBaseGenerator', () => {
     expect(parsedTasks.views[0]).toEqual(expect.objectContaining({
       customSetting: 'keep-me',
       order: ['file.name', 'note.custom', 'note.sprint'],
-      newTaskProperty1: 'note.estimate',
-      newTaskProperty2: 'note.due',
+      newTaskProperty1: 'note.custom',
     }));
     expect(parsedTasks.views[0]).not.toHaveProperty('cardProperty1');
     expect(parsedTasks.views[0]).not.toHaveProperty('cardProperty2');

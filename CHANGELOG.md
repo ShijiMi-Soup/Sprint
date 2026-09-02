@@ -5,12 +5,21 @@
 ### Changed
 
 - Display Kanban Due values as date-only `YYYY/MM/DD` labels without a time component.
+- Build the inline New task form from each Kanban view's visible editable note
+  properties and preserve their Properties-selector order.
+- Leave tasks created from the full Sprint board unassigned by default, while
+  Current and Next sprint views assign their corresponding sprint automatically.
 
 ### Added
 
 - Added an Open project link beside each project name in Kanban views.
 - Added sprint-relative due dates to all generated tutorial tasks.
 - Show Due on default Kanban cards and use a calendar icon instead of a text label.
+- Added safe recovery for missing or manually moved Sprint workspaces, including
+  live rename tracking, locate and confirmed replacement actions, and paused
+  automatic synchronization while the configured folder is missing.
+- Added an English/Japanese VitePress documentation site with local search and a
+  GitHub Pages deployment workflow.
 
 ### Documentation
 

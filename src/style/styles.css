@@ -228,6 +228,13 @@ body .sprint-bases-view button.sprint-bases-entry {
   width: 100%;
 }
 
+.sprint-bases-new-task-fields {
+  display: grid;
+  gap: var(--size-4-2);
+  max-height: 280px;
+  overflow-y: auto;
+}
+
 .sprint-bases-new-task-name {
   font-weight: var(--font-medium);
 }
@@ -237,6 +244,24 @@ body .sprint-bases-view button.sprint-bases-entry {
   display: grid;
   gap: var(--size-4-2);
   grid-template-columns: auto minmax(0, 1fr);
+}
+
+.sprint-bases-new-task-field textarea,
+.sprint-bases-new-task-field select {
+  min-width: 0;
+  width: 100%;
+}
+
+.sprint-bases-new-task-checkbox {
+  align-items: center;
+  display: flex;
+  gap: var(--size-4-2);
+  min-width: 0;
+}
+
+.sprint-bases-new-task-checkbox input[type='checkbox'] {
+  flex: 0 0 auto;
+  width: auto;
 }
 
 .sprint-bases-new-task-field-icon {

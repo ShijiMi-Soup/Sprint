@@ -15,6 +15,7 @@ import type {
 } from '../domain/types';
 import type { SprintFeatureApi } from '../SprintFeature';
 import { sprintSkillContent } from './SprintBaseGenerator';
+import { MissingSprintWorkspaceError } from './SprintWorkspaceRecoveryModal';
 
 const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
@@ -544,6 +545,7 @@ export class SprintSettingTab extends PluginSettingTab {
       const result = await this.feature.sync();
       new Notice(`Sprints synchronized: ${result.created} created, ${result.movedTasks} tasks moved.`);
     } catch (error) {
+      if (error instanceof MissingSprintWorkspaceError) return;
       new Notice(error instanceof Error ? `Sprint sync failed: ${error.message}` : 'Sprint sync failed.');
     }
   }
@@ -564,6 +566,7 @@ export class SprintSettingTab extends PluginSettingTab {
       new Notice(`Sprint workspace reset: ${result.created} sprints created.`);
       this.refreshSettings();
     } catch (error) {
+      if (error instanceof MissingSprintWorkspaceError) return;
       new Notice(error instanceof Error ? `Sprint workspace reset failed: ${error.message}` : 'Sprint workspace reset failed.');
     }
   }
@@ -584,6 +587,7 @@ export class SprintSettingTab extends PluginSettingTab {
       const result = await this.feature.generateBases();
       new Notice(`Sprint Bases generated: ${result.created} created, ${result.skipped} already existed.`);
     } catch (error) {
+      if (error instanceof MissingSprintWorkspaceError) return;
       new Notice(error instanceof Error ? `Sprint Base generation failed: ${error.message}` : 'Sprint Base generation failed.');
     }
   }

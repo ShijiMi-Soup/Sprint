@@ -17,6 +17,11 @@ import {
   PluginDataSprintSettingsStore,
   type SprintSettingsStore,
 } from './obsidian/SprintSettingsStore';
+import {
+  CreateSprintWorkspaceModal,
+  MissingSprintWorkspaceError,
+  SprintWorkspaceRecoveryModal,
+} from './obsidian/SprintWorkspaceRecoveryModal';
 
 export interface SprintFeatureApi {
   readonly settings: Readonly<SprintSettings>;
@@ -34,6 +39,8 @@ export class SprintFeature implements SprintFeatureApi {
   private baseGenerator!: SprintBaseGenerator;
   private mutationTail: Promise<void> = Promise.resolve();
   private lastSyncWarnings: string[] = [];
+  private workspaceRecoveryPrompted = false;
+  private readonly profilesBeingRenamed = new Set<string>();
 
   constructor(
     private readonly plugin: Plugin,
@@ -79,11 +86,17 @@ export class SprintFeature implements SprintFeatureApi {
       name: 'Open summary',
       callback: () => { void this.openAgilePm(); },
     });
+    this.registerLiveWorkspaceRenameSafety();
     this.scheduleOnboarding();
     this.scheduleSync();
   }
 
   async sync(): Promise<SprintSyncResult> {
+    if (!this.ensureWorkspaceAvailable(true)) throw new MissingSprintWorkspaceError();
+    return this.syncAvailableWorkspace();
+  }
+
+  private async syncAvailableWorkspace(): Promise<SprintSyncResult> {
     const warnings: string[] = [];
     if (this.needsSupportMigration()) {
       await this.runOptionalSyncPhase('Support-file migration', () => this.generateBases(), warnings);
@@ -98,6 +111,7 @@ export class SprintFeature implements SprintFeatureApi {
   }
 
   async generateBases(): Promise<SprintBaseGenerationResult> {
+    if (!this.ensureWorkspaceAvailable(true)) throw new MissingSprintWorkspaceError();
     const result = await this.baseGenerator.generate(this.currentSettings);
     if (
       this.currentSettings.supportSchemaVersion < CURRENT_SUPPORT_SCHEMA_VERSION
@@ -117,6 +131,7 @@ export class SprintFeature implements SprintFeatureApi {
   }
 
   async resetProfile(profileId: string): Promise<SprintSyncResult> {
+    if (!this.ensureWorkspaceAvailable(true)) throw new MissingSprintWorkspaceError();
     await this.baseGenerator.resetProfileRoot(this.currentSettings, profileId);
     await this.updateSettings((settings) => {
       const profile = settings.profiles.find((candidate) => candidate.id === profileId);
@@ -162,24 +177,17 @@ export class SprintFeature implements SprintFeatureApi {
         ? this.plugin.app.vault.getFileByPath(legacyDashboardPath)
         : null;
       let dashboardRenamed = false;
-      if (legacyDashboard && !this.plugin.app.vault.getAbstractFileByPath(summaryPath)) {
-        await this.plugin.app.fileManager.renameFile(legacyDashboard, summaryPath);
-        dashboardRenamed = true;
-      }
+      this.profilesBeingRenamed.add(profileId);
       try {
-        if (existing) await this.plugin.app.fileManager.renameFile(existing, nextRoot);
-      } catch (error) {
-        const summary = this.plugin.app.vault.getFileByPath(summaryPath);
-        if (dashboardRenamed && summary) {
-          await this.plugin.app.fileManager.renameFile(summary, legacyDashboardPath);
+        if (legacyDashboard && !this.plugin.app.vault.getAbstractFileByPath(summaryPath)) {
+          await this.plugin.app.fileManager.renameFile(legacyDashboard, summaryPath);
+          dashboardRenamed = true;
         }
-        throw error;
-      }
-      profile.rootFolder = nextRoot;
-      profile.tasksBasePath = rewritePath(profile.tasksBasePath) || `${nextRoot}/Tasks.base`;
-      profile.sprintsBasePath = rewritePath(profile.sprintsBasePath) || `${nextRoot}/Sprints.base`;
-      profile.projectsBasePath = rewritePath(profile.projectsBasePath) || `${nextRoot}/Projects.base`;
-      try {
+        if (existing) await this.plugin.app.fileManager.renameFile(existing, nextRoot);
+        profile.rootFolder = nextRoot;
+        profile.tasksBasePath = rewritePath(profile.tasksBasePath) || `${nextRoot}/Tasks.base`;
+        profile.sprintsBasePath = rewritePath(profile.sprintsBasePath) || `${nextRoot}/Sprints.base`;
+        profile.projectsBasePath = rewritePath(profile.projectsBasePath) || `${nextRoot}/Projects.base`;
         await this.store.save(next);
         this.currentSettings = next;
       } catch (error) {
@@ -190,6 +198,8 @@ export class SprintFeature implements SprintFeatureApi {
           await this.plugin.app.fileManager.renameFile(summary, legacyDashboardPath);
         }
         throw error;
+      } finally {
+        this.profilesBeingRenamed.delete(profileId);
       }
     };
     this.mutationTail = this.mutationTail.then(run, run);
@@ -256,7 +266,8 @@ export class SprintFeature implements SprintFeatureApi {
   private scheduleSync(): void {
     const sync = (): void => {
       if (!this.currentSettings.enabled) return;
-      void this.sync().catch((error: unknown) => {
+      if (!this.ensureWorkspaceAvailable(false)) return;
+      void this.syncAvailableWorkspace().catch((error: unknown) => {
         new Notice(error instanceof Error
           ? `Automatic sprint sync failed: ${error.message}`
           : 'Automatic sprint sync failed.');
@@ -278,6 +289,7 @@ export class SprintFeature implements SprintFeatureApi {
         : '';
       new Notice(`Sprints synchronized: ${result.created} created, ${result.movedTasks} tasks moved.${warning}`);
     } catch (error) {
+      if (error instanceof MissingSprintWorkspaceError) return;
       new Notice(error instanceof Error ? `Sprint sync failed: ${error.message}` : 'Sprint sync failed.');
     }
   }
@@ -287,6 +299,7 @@ export class SprintFeature implements SprintFeatureApi {
       const result = await this.generateBases();
       new Notice(`Sprint Bases generated: ${result.created} created, ${result.skipped} already existed.`);
     } catch (error) {
+      if (error instanceof MissingSprintWorkspaceError) return;
       new Notice(error instanceof Error ? `Sprint Base generation failed: ${error.message}` : 'Sprint Base generation failed.');
     }
   }
@@ -307,6 +320,7 @@ export class SprintFeature implements SprintFeatureApi {
   }
 
   private async openAgilePm(): Promise<void> {
+    if (!this.ensureWorkspaceAvailable(true)) return;
     const profile = this.currentSettings.profiles[0];
     if (!profile?.rootFolder) {
       new Notice('No sprint folder is configured.');
@@ -328,4 +342,156 @@ export class SprintFeature implements SprintFeatureApi {
     app.setting?.open();
     app.setting?.openTabById(this.plugin.manifest.id);
   }
+
+  private ensureWorkspaceAvailable(interactive: boolean): boolean {
+    const profile = this.getMissingWorkspaceProfile();
+    if (!profile) return true;
+    if (interactive || !this.workspaceRecoveryPrompted) {
+      this.workspaceRecoveryPrompted = true;
+      this.openWorkspaceRecovery(profile.id, profile.rootFolder);
+    }
+    return false;
+  }
+
+  private getMissingWorkspaceProfile(): SprintSettings['profiles'][number] | null {
+    if (!this.currentSettings.onboardingComplete) return null;
+    const profile = this.currentSettings.profiles.find((candidate) => (
+      candidate.enabled && candidate.samplesInitialized === true
+    ));
+    if (!profile) return null;
+    const root = normalizeWorkspacePath(profile.rootFolder);
+    if (!root) return null;
+    return this.plugin.app.vault.getFolderByPath(root) ? null : profile;
+  }
+
+  private openWorkspaceRecovery(profileId: string, rootFolder: string): void {
+    new SprintWorkspaceRecoveryModal(
+      this.plugin.app,
+      { rootFolder },
+      {
+        locateWorkspace: async (folderPath): Promise<void> => {
+          await this.locateWorkspace(profileId, folderPath);
+        },
+        createReplacementWorkspace: async (): Promise<void> => {
+          this.openCreateReplacementWorkspace(profileId);
+        },
+      },
+    ).open();
+  }
+
+  private openCreateReplacementWorkspace(profileId: string): void {
+    const profile = this.currentSettings.profiles.find((candidate) => candidate.id === profileId);
+    if (!profile) return;
+    new CreateSprintWorkspaceModal(
+      this.plugin.app,
+      profile.rootFolder,
+      () => this.createReplacementWorkspace(profileId),
+    ).open();
+  }
+
+  private async locateWorkspace(profileId: string, folderPath: string): Promise<void> {
+    const root = normalizeWorkspacePath(folderPath);
+    if (!root) throw new Error('Enter the workspace folder path.');
+    if (!this.plugin.app.vault.getFolderByPath(root)) {
+      throw new Error(`Sprint folder not found: ${root}`);
+    }
+    await this.updateWorkspaceRoot(profileId, root);
+    await this.generateBasesAfterRecovery();
+  }
+
+  private async createReplacementWorkspace(profileId: string): Promise<void> {
+    const profile = this.currentSettings.profiles.find((candidate) => candidate.id === profileId);
+    if (!profile) throw new Error('Sprint workspace not found.');
+    const root = normalizeWorkspacePath(profile.rootFolder);
+    if (!root) throw new Error('Set a Sprint workspace folder before creating a replacement.');
+    if (this.plugin.app.vault.getAbstractFileByPath(root)) {
+      throw new Error(`A file or folder already exists at: ${root}`);
+    }
+    await this.updateSettings((settings) => {
+      settings.enabled = true;
+      const target = settings.profiles.find((candidate) => candidate.id === profileId);
+      if (target) target.samplesInitialized = true;
+    });
+    await this.generateBasesAfterRecovery();
+  }
+
+  private async generateBasesAfterRecovery(): Promise<void> {
+    const result = await this.baseGenerator.generate(this.currentSettings);
+    if (
+      this.currentSettings.supportSchemaVersion < CURRENT_SUPPORT_SCHEMA_VERSION
+      || this.currentSettings.profiles.some(({ samplesInitialized }) => samplesInitialized !== true)
+    ) {
+      await this.updateSettings((settings) => {
+        settings.supportSchemaVersion = CURRENT_SUPPORT_SCHEMA_VERSION;
+        for (const profile of settings.profiles) profile.samplesInitialized = true;
+      });
+    }
+    const syncResult = await this.manager.sync();
+    new Notice(`Sprint workspace ready: ${syncResult.created} sprints created. ${result.created} support files created.`);
+  }
+
+  private registerLiveWorkspaceRenameSafety(): void {
+    this.plugin.registerEvent(this.plugin.app.vault.on('rename', (file, oldPath) => {
+      void this.handleWorkspaceRename(file.path, oldPath).catch((error: unknown) => {
+        new Notice(error instanceof Error
+          ? `Sprint workspace path update failed: ${error.message}`
+          : 'Sprint workspace path update failed.');
+      });
+    }));
+  }
+
+  private async handleWorkspaceRename(nextPath: string, oldPath: string): Promise<void> {
+    const profile = this.currentSettings.profiles.find((candidate) => (
+      candidate.enabled
+      && !this.profilesBeingRenamed.has(candidate.id)
+      && isPathOrAncestor(oldPath, normalizeWorkspacePath(candidate.rootFolder))
+    ));
+    if (!profile) return;
+    const currentRoot = normalizeWorkspacePath(profile.rootFolder);
+    const nextRoot = currentRoot === oldPath
+      ? nextPath
+      : `${nextPath}${currentRoot.slice(oldPath.length)}`;
+    if (!normalizeWorkspacePath(nextRoot)) return;
+    await this.updateWorkspaceRoot(profile.id, nextRoot, currentRoot);
+  }
+
+  private updateWorkspaceRoot(
+    profileId: string,
+    nextRoot: string,
+    expectedRoot?: string,
+  ): Promise<void> {
+    return this.updateSettings((settings) => {
+      const profile = settings.profiles.find((candidate) => candidate.id === profileId);
+      if (!profile) return;
+      const previousRoot = normalizeWorkspacePath(profile.rootFolder);
+      if (expectedRoot && previousRoot !== expectedRoot) return;
+      profile.rootFolder = nextRoot;
+      profile.tasksBasePath = rewriteWorkspacePath(profile.tasksBasePath, previousRoot, nextRoot)
+        || `${nextRoot}/Tasks.base`;
+      profile.sprintsBasePath = rewriteWorkspacePath(profile.sprintsBasePath, previousRoot, nextRoot)
+        || `${nextRoot}/Sprints.base`;
+      profile.projectsBasePath = rewriteWorkspacePath(profile.projectsBasePath, previousRoot, nextRoot)
+        || `${nextRoot}/Projects.base`;
+    });
+  }
+}
+
+function normalizeWorkspacePath(path: string): string {
+  const normalized = path.trim().replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
+  if (!normalized || normalized.split('/').some((segment) => segment === '.' || segment === '..')) {
+    return '';
+  }
+  return normalized;
+}
+
+function isPathOrAncestor(ancestor: string, path: string): boolean {
+  return path === ancestor || path.startsWith(`${ancestor}/`);
+}
+
+function rewriteWorkspacePath(path: string, previousRoot: string, nextRoot: string): string {
+  if (!path || !previousRoot) return path;
+  if (path === previousRoot) return nextRoot;
+  return path.startsWith(`${previousRoot}/`)
+    ? `${nextRoot}${path.slice(previousRoot.length)}`
+    : path;
 }

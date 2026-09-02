@@ -17,7 +17,7 @@ rules, or AI instructions change:
 5. Update [TODO.md](TODO.md) when planned work is completed, added, or rescoped.
 6. Update [AGENT_GUIDE.md](AGENT_GUIDE.md) and generated skill content when the
    task, project, sprint, or workspace contract changes.
-7. Run `npm run check` before merging or releasing.
+7. Run `npm run check` and `npm run docs:build` before merging or releasing.
 
 Pull requests repeat this review in `.github/pull_request_template.md` so the
 requirement also applies to contributors who are not using a coding agent.
@@ -29,5 +29,5 @@ behavioral explanation is accurate. The repository instruction in `AGENTS.md`
 therefore requires the implementing agent or contributor to perform this review
 as part of the same change.
 
-When the documentation site is configured, its build should be added to CI so
-broken links, invalid configuration, and rendering failures block publication.
+The VitePress build runs in the GitHub Pages workflow for pull requests and
+deployments so invalid configuration and rendering failures block publication.

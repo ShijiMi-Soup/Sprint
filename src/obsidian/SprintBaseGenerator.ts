@@ -236,8 +236,6 @@ function sprintView(
     ...(sprintScope ? [`    sprintScope: ${yamlString(sprintScope)}`] : []),
     `    layout: ${yamlString(layout)}`,
     `    showCompleted: ${showCompleted}`,
-    '    newTaskProperty1: note.estimate',
-    '    newTaskProperty2: note.due',
   ];
 }
 
@@ -408,14 +406,6 @@ export function migrateTasksBaseContent(content: string, profileId: string): str
         && view.order.every((property, index) => property === oldDefaultOrder[index])
       ) {
         view.order.splice(2, 0, 'note.due');
-        changed = true;
-      }
-      if (view.newTaskProperty1 === undefined) {
-        view.newTaskProperty1 = 'note.estimate';
-        changed = true;
-      }
-      if (view.newTaskProperty2 === undefined) {
-        view.newTaskProperty2 = 'note.due';
         changed = true;
       }
       for (const position of [1, 2, 3]) {

@@ -34,7 +34,10 @@ The full Sprint board groups tasks by project and separates Not started, In prog
 
 ### Create tasks from the board
 
-Each project and state column includes a **New task** action. New tasks inherit the selected project, sprint scope, and state, and include Estimate and Due date fields by default.
+Each project and state column includes a **New task** action. New tasks inherit
+the selected project and state. Current and Next views also assign their sprint;
+the full board leaves Sprint unassigned unless you select one. The form follows
+the view's visible editable Properties, with Estimate and Due shown by default.
 
 ![Focused inline New task form with an estimate field](docs/images/new-task-form.png)
 
@@ -139,7 +142,7 @@ Projects can be collapsed or hidden from sprint boards. Hidden projects remain a
 
 Sprint creates missing support files during first-time setup and applies versioned, additive migrations when its managed schema changes. Existing task and project notes are not reset during normal startup. Custom Base views, properties, and unknown view settings are preserved.
 
-Changing the Sprint folder through the rename action moves the existing workspace and updates configured Base paths. **Reset Sprint workspace** is destructive and requires typing `Yes, delete.` before Sprint deletes and recreates the configured folder.
+Changing the Sprint folder through the rename action moves the existing workspace and updates configured Base paths. Renames made in Obsidian while Sprint is running are detected automatically. If an initialized workspace is missing at startup, synchronization pauses and Sprint offers to locate it or create a confirmed empty replacement. **Reset Sprint workspace** is destructive and requires typing `Yes, delete.` before Sprint deletes and recreates the configured folder.
 
 ## AI Skills
 
