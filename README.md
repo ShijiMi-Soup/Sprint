@@ -158,6 +158,8 @@ Sprint does not send vault content over the network or invoke an AI model. Exter
 ## Commands
 
 - **Sprint: Open Sprint Summary** opens the generated dashboard.
+- **Sprint: Open planner** opens the Sprint Planner view directly, regardless
+  of the Tasks Base's default view.
 - **Sprint: Sync sprints** creates missing sprint notes, updates lifecycle states, and applies rollover rules.
 - **Sprint: Generate sprint Bases** creates missing support files and applies managed Base schema updates.
 

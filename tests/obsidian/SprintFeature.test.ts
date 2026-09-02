@@ -105,6 +105,8 @@ describe('SprintFeature', () => {
       .toHaveBeenCalledWith(expect.objectContaining({ id: 'generate-bases' }));
     expect((host as unknown as { addCommand: jest.Mock }).addCommand)
       .toHaveBeenCalledWith(expect.objectContaining({ id: 'open-summary' }));
+    expect((host as unknown as { addCommand: jest.Mock }).addCommand)
+      .toHaveBeenCalledWith(expect.objectContaining({ id: 'open-planner' }));
     expect((host as unknown as { addRibbonIcon: jest.Mock }).addRibbonIcon)
       .toHaveBeenCalledWith('check-check', 'Open sprint settings', expect.any(Function));
     const commands = (host as unknown as { addCommand: jest.Mock }).addCommand.mock.calls
@@ -112,6 +114,9 @@ describe('SprintFeature', () => {
     await commands.find(({ id }) => id === 'open-summary')?.callback();
     expect((host.app.workspace as unknown as { openLinkText: jest.Mock }).openLinkText)
       .toHaveBeenCalledWith('Sprint/Sprint Summary.md', '', false);
+    await commands.find(({ id }) => id === 'open-planner')?.callback();
+    expect((host.app.workspace as unknown as { openLinkText: jest.Mock }).openLinkText)
+      .toHaveBeenCalledWith('Sprint/Tasks.base#Sprint planner', '', false);
     expect(saved).toHaveBeenCalledWith(expect.objectContaining({ enabled: true }));
     expect(feature.settings.enabled).toBe(true);
   });

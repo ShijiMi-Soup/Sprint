@@ -154,6 +154,8 @@ SprintがVaultの内容をネットワーク経由で送信したり、AIモデ�
 ## コマンド
 
 - **Sprint: Open Sprint Summary**: 自動生成されたダッシュボードを開きます。
+- **Sprint: Open planner**: Tasks Baseの標準ビュー設定に関係なく、
+  Sprint Plannerビューを直接開きます。
 - **Sprint: Sync sprints**: 不足しているスプリントノートを作成し、ライフサイクル状態と繰り越しルールを適用します。
 - **Sprint: Generate sprint Bases**: 不足しているサポートファイルを作成し、管理対象のBaseスキーマを更新します。
 

@@ -86,6 +86,11 @@ export class SprintFeature implements SprintFeatureApi {
       name: 'Open summary',
       callback: () => { void this.openAgilePm(); },
     });
+    this.plugin.addCommand({
+      id: 'open-planner',
+      name: 'Open planner',
+      callback: () => { void this.openSprintPlanner(); },
+    });
     this.registerLiveWorkspaceRenameSafety();
     this.scheduleOnboarding();
     this.scheduleSync();
@@ -333,6 +338,21 @@ export class SprintFeature implements SprintFeatureApi {
       return;
     }
     await this.plugin.app.workspace.openLinkText(path, '', false);
+  }
+
+  private async openSprintPlanner(): Promise<void> {
+    if (!this.ensureWorkspaceAvailable(true)) return;
+    const profile = this.currentSettings.profiles[0];
+    const path = profile?.tasksBasePath?.trim();
+    if (!path) {
+      new Notice('No tasks base is configured.');
+      return;
+    }
+    if (!this.plugin.app.vault.getFileByPath(path)) {
+      new Notice(`Tasks Base not found: ${path}`);
+      return;
+    }
+    await this.plugin.app.workspace.openLinkText(`${path}#Sprint planner`, '', false);
   }
 
   private openSettings(): void {

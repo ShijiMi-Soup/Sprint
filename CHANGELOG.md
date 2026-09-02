@@ -16,6 +16,8 @@
 
 ### Added
 
+- Added an **Open planner** command that targets the configured Tasks Base's
+  Sprint Planner view without depending on its default view.
 - Added a Sprint Planner view with Backlog and chronological sprint columns,
   task/point totals, drag-and-drop assignment, and an accessible per-card Sprint
   selector. Reassignment changes only the task's `sprint` property.

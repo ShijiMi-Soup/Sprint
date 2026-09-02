@@ -219,6 +219,10 @@ does not assign a sprint automatically; when Sprint is visible in that view's
 Properties selection, the form provides a sprint selector and defaults to
 **No sprint**.
 
+Run **Open planner** from the command palette to open the configured
+`Tasks.base#Sprint planner` view directly. The command does not depend on which
+view the user has chosen as the Tasks Base default.
+
 ## Rename the Sprint workspace
 
 ### Supported method
@@ -268,5 +272,6 @@ run **Sprint: Generate bases** and then **Sprint: Sync**.
 | Command | Effect |
 | --- | --- |
 | Sprint: Open summary | Opens the configured `Sprint Summary.md`. |
+| Sprint: Open planner | Opens the configured Tasks Base's Sprint Planner view directly. |
 | Sprint: Sync | Creates missing sprint notes, updates lifecycle statuses, and applies rollover. |
 | Sprint: Generate bases | Creates missing support files and applies managed Base schema migrations. |
