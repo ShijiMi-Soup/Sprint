@@ -36,7 +36,7 @@ const DEFAULTS: SprintDefaults = {
 };
 
 // Increment when an upgrade must rerun Base or support-file migrations.
-export const CURRENT_SUPPORT_SCHEMA_VERSION = 3;
+export const CURRENT_SUPPORT_SCHEMA_VERSION = 4;
 
 function profileForRoot(rootFolder: string, anchorDate = ''): SprintProfile {
   const root = rootFolder.trim().replace(/^\/+|\/+$/g, '') || 'Sprint';

@@ -1,5 +1,6 @@
 import { normalizeSprintSettings } from '@/domain/SprintSettings';
 import {
+  applyTaskSprintAssignment,
   applyTaskBoardState,
   applyNewTaskFrontmatter,
   createSprintBasesViewRegistration,
@@ -15,6 +16,7 @@ import {
   parseTaskPropertyValue,
   resolveTaskPropertyType,
   selectRecentVelocityPoints,
+  taskReferencesSprint,
 } from '@/obsidian/SprintBasesView';
 
 describe('SprintBasesView', () => {
@@ -29,7 +31,7 @@ describe('SprintBasesView', () => {
     expect(getSprintBasesOptions(settings)).toEqual(expect.arrayContaining([
       expect.objectContaining({
         key: 'layout',
-        options: expect.objectContaining({ kanban: 'Kanban' }),
+        options: expect.objectContaining({ kanban: 'Kanban', planner: 'Sprint planner' }),
       }),
     ]));
   });
@@ -88,6 +90,35 @@ describe('SprintBasesView', () => {
     expect(getNewTaskSprintScope(undefined)).toBeNull();
     expect(getNewTaskSprintScope('current')).toBe('current');
     expect(getNewTaskSprintScope('next')).toBe('next');
+  });
+
+  it('reassigns only the sprint list for Sprint Planner moves', () => {
+    const frontmatter: Record<string, unknown> = {
+      project: ['[[Sprint/Projects/Research]]'],
+      sprint: ['[[Sprint/Sprints/Sprint 1]]'],
+      'in progress': true,
+      'is done': false,
+    };
+
+    applyTaskSprintAssignment(frontmatter, 'Sprint/Sprints/Sprint 2');
+    expect(frontmatter).toEqual({
+      project: ['[[Sprint/Projects/Research]]'],
+      sprint: ['[[Sprint/Sprints/Sprint 2]]'],
+      'in progress': true,
+      'is done': false,
+    });
+
+    applyTaskSprintAssignment(frontmatter, null);
+    expect(frontmatter.sprint).toEqual([]);
+  });
+
+  it('matches planner sprint assignments by full path or sprint basename', () => {
+    expect(taskReferencesSprint(
+      ['[[Sprint/Sprints/Sprint 2]]'],
+      'Sprint/Sprints/Sprint 2',
+    )).toBe(true);
+    expect(taskReferencesSprint(['[[Sprint 2]]'], 'Sprint/Sprints/Sprint 2')).toBe(true);
+    expect(taskReferencesSprint(['[[Sprint 3]]'], 'Sprint/Sprints/Sprint 2')).toBe(false);
   });
 
   it('uses the native Properties order for task-card metadata', () => {

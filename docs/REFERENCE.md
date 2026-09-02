@@ -73,6 +73,7 @@ preserved.
 | View | Purpose |
 | --- | --- |
 | Sprint board | All non-archived tasks grouped first by project and then by Not started, In progress, and Done. |
+| Sprint planner | Non-archived tasks arranged across Backlog and generated sprint columns for reassignment. |
 | Tasks | Editable table of all task notes, including archived tasks. |
 | Current sprint | Non-archived tasks assigned to the current sprint, grouped by active projects. |
 | Next sprint | Non-archived tasks assigned to the next sprint, grouped by active projects. |
@@ -81,6 +82,13 @@ The full Sprint board can show projects in any project state. Current and Next
 sprint views show projects that are in progress. Each project section can be
 collapsed or moved to the board's **Hidden** section. Dragging a task card between
 state columns updates the task properties.
+
+The **Sprint planner** orders generated sprint columns by start date and shows
+task and estimate totals for each column. Drag a task between Backlog and sprint
+columns to replace only its `sprint` assignment; project and state remain
+unchanged. Each card also has a Sprint selector for keyboard and mobile use.
+Completed tasks are visible by default, while archived tasks remain excluded.
+Use the view's **Show completed tasks** option to hide completed work.
 
 #### Sprints Base
 
@@ -109,6 +117,8 @@ Projects table. Run **Sprint: Open summary** from the command palette to open it
 - Move unfinished work according to the selected rollover policy.
 - Create tasks inline from a Kanban column with project, sprint, and state context.
 - Edit task state by dragging cards between columns.
+- Plan tasks by dragging them between Backlog and generated sprint columns without
+  changing task state or project.
 - Select and order the task properties shown on Kanban cards.
 - Collapse projects, hide projects, and open the underlying project note.
 - Archive tasks without deleting their notes.

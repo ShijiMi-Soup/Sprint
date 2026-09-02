@@ -53,7 +53,7 @@
   schema. Show Due by default in the inline task editor opened from a Kanban lane's
   **New task** button. Preserve existing task notes that do not have a due date, and use
   Obsidian's native date-property editor rather than a plain text field.
-- [ ] Add a Sprint planner view for quickly assigning and moving tasks among the backlog
+- [x] Add a Sprint planner view for quickly assigning and moving tasks among the backlog
   and existing sprint notes. Support drag-and-drop reassignment without changing task
   state, show useful capacity or estimate totals, preserve project relationships, and
   confirm behavior for unassigned, archived, and completed tasks before implementation.

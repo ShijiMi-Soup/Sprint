@@ -12,6 +12,9 @@
 
 ### Added
 
+- Added a Sprint Planner view with Backlog and chronological sprint columns,
+  task/point totals, drag-and-drop assignment, and an accessible per-card Sprint
+  selector. Reassignment changes only the task's `sprint` property.
 - Added an Open project link beside each project name in Kanban views.
 - Added sprint-relative due dates to all generated tutorial tasks.
 - Show Due on default Kanban cards and use a calendar icon instead of a text label.

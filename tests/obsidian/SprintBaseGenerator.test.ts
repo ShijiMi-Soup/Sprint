@@ -334,6 +334,9 @@ describe('SprintBaseGenerator', () => {
     }).views;
     expect(taskViews.find(({ name }) => name === 'Sprint board')?.order)
       .toEqual(['file.name', 'note.estimate', 'note.due', 'note.sprint']);
+    expect(taskViews.find(({ name }) => name === 'Sprint planner')).toEqual(expect.objectContaining({
+      order: ['file.name', 'note.project', 'note.estimate', 'note.due'],
+    }));
     expect(taskViews.find(({ name }) => name === 'Current sprint')?.order)
       .toEqual(['file.name', 'note.estimate', 'note.due']);
     expect(taskViews.find(({ name }) => name === 'Next sprint')?.order)
@@ -413,6 +416,13 @@ describe('SprintBaseGenerator', () => {
     expect(parsedTasks.views[1]?.order).toContain('note.archived');
     expect(parsedTasks.views[1]?.order).toContain('note.due');
     expect(parsedTasks.views[2]?.order).toEqual(['note.custom']);
+    expect(parsedTasks.views.filter(({ name }) => name === 'Sprint planner')).toEqual([
+      expect.objectContaining({
+        type: 'sprint-agent-sprint-board',
+        layout: 'planner',
+        order: ['file.name', 'note.project', 'note.estimate', 'note.due'],
+      }),
+    ]);
     expect(migrateTasksBaseContent(migratedTasks, 'agile-pm')).toBe(migratedTasks);
     expect(parsedProjects.properties['note.hidden']?.displayName).toBe('Hidden');
     expect(parsedProjects.views[0]?.order).toContain('note.hidden');

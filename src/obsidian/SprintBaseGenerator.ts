@@ -211,7 +211,7 @@ function sprintOverviewView(profileId: string): string[] {
 function sprintView(
   profileId: string,
   name: string,
-  layout: 'board' | 'list' | 'kanban',
+  layout: 'board' | 'list' | 'kanban' | 'planner',
   showCompleted: boolean,
   sprintScope?: SprintTaskScope,
 ): string[] {
@@ -229,9 +229,10 @@ function sprintView(
     ] : []),
     '    order:',
     '      - file.name',
+    ...(layout === 'planner' ? ['      - note.project'] : []),
     '      - note.estimate',
     '      - note.due',
-    ...(!sprintScope ? ['      - note.sprint'] : []),
+    ...(!sprintScope && layout !== 'planner' ? ['      - note.sprint'] : []),
     `    sprintProfile: ${yamlString(profileId)}`,
     ...(sprintScope ? [`    sprintScope: ${yamlString(sprintScope)}`] : []),
     `    layout: ${yamlString(layout)}`,
@@ -278,6 +279,7 @@ function tasksBaseContent(
     taskBaseProperties(),
     [
       ...sprintView(resolved.id, 'Sprint board', 'kanban', true),
+      ...sprintView(resolved.id, 'Sprint planner', 'planner', true),
       ...tableView('Tasks', [
         'file.name',
         'formula.task_state',
@@ -371,6 +373,21 @@ export function migrateTasksBaseContent(content: string, profileId: string): str
       changed = true;
     }
     if (!Array.isArray(base.views)) return changed;
+    const hasPlanner = base.views.some((candidate) => (
+      asRecord(candidate)?.name === 'Sprint planner'
+    ));
+    if (!hasPlanner) {
+      base.views.push({
+        type: SPRINT_BASES_VIEW_TYPE,
+        name: 'Sprint planner',
+        filters: { and: ['note.archived != true'] },
+        order: ['file.name', 'note.project', 'note.estimate', 'note.due'],
+        sprintProfile: profileId,
+        layout: 'planner',
+        showCompleted: true,
+      });
+      changed = true;
+    }
     for (const candidate of base.views) {
       const view = asRecord(candidate);
       if (!view) continue;
