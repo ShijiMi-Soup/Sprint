@@ -26,6 +26,16 @@
   controls. Keep reminder state local, avoid manipulative streak penalties, and test
   desktop, iOS, and Android behavior independently before release.
 
+## Agile ceremonies
+
+- [ ] Implement the solo-first ceremony companion proposed in
+  [AGILE_CEREMONIES_RESEARCH.md](AGILE_CEREMONIES_RESEARCH.md): sprint planning, brief
+  daily check-ins, sprint reviews, mini-retrospectives, and explicit sprint closing.
+  Support both self-guided and optional AI-assisted flows without introducing an AI
+  provider dependency. Reuse the existing sprint review and retrospective metadata
+  where practical, keep the user as the decision maker, and add ceremony commands,
+  persistence, completion indicators, and migration coverage incrementally.
+
 ## Task planning and board configuration
 
 - [x] Add a `due` date property to newly created task notes and the generated Tasks Base

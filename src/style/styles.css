@@ -58,6 +58,14 @@
   font-size: var(--font-ui-small);
 }
 
+.sprint-bases-project-link {
+  color: var(--text-muted);
+}
+
+.sprint-bases-project-link:hover {
+  color: var(--text-accent);
+}
+
 .sprint-bases-project-visibility {
   grid-column: 5;
 }

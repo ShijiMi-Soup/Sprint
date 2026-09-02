@@ -10,6 +10,7 @@ import {
   getEditableTaskProperties,
   getSprintBasesOptions,
   getTaskProjectGroup,
+  openProjectNote,
   selectRecentVelocityPoints,
 } from '@/obsidian/SprintBasesView';
 
@@ -151,6 +152,16 @@ describe('SprintBasesView', () => {
     [{}, 'No project'],
   ])('resolves task project swimlanes', (frontmatter, expected) => {
     expect(getTaskProjectGroup(frontmatter)).toBe(expected);
+  });
+
+  it('opens a Kanban project note at its exact vault path', () => {
+    const openLinkText = jest.fn();
+    const app = { workspace: { openLinkText } };
+    const file = { path: 'Sprint/Projects/Research project.md' };
+
+    openProjectNote(app as never, file as never);
+
+    expect(openLinkText).toHaveBeenCalledWith(file.path, '', false);
   });
 
   it('keeps zero-point sprints in the recent Velocity series', () => {

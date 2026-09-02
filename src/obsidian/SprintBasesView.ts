@@ -70,6 +70,10 @@ export function getTaskProjectGroup(
   return alias?.trim() || target.split('/').at(-1)?.trim() || 'No project';
 }
 
+export function openProjectNote(app: App, file: TFile): void {
+  void app.workspace.openLinkText(file.path, '', false);
+}
+
 export function getSprintBasesOptions(
   settings: SprintSettings,
 ): BasesAllOptions[] {
@@ -380,11 +384,27 @@ class SprintBasesView extends BasesView {
       });
       const projectHeader = projectSection.createEl('summary', { cls: 'sprint-bases-project-header' });
       projectHeader.createSpan({ cls: 'sprint-bases-project-title', text: project });
+      const projectFile = projectFileByGroup.get(project);
+      if (projectFile) {
+        const projectLink = projectHeader.createEl('button', {
+          cls: 'sprint-bases-project-link clickable-icon',
+          attr: {
+            type: 'button',
+            'aria-label': `Open project ${project}`,
+            title: `Open project ${project}`,
+          },
+        });
+        setIcon(projectLink, 'external-link');
+        projectLink.addEventListener('click', (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          openProjectNote(this.app, projectFile);
+        });
+      }
       projectHeader.createSpan({
         cls: 'sprint-bases-project-count',
         text: String([...columns.values()].reduce((total, entries) => total + entries.length, 0)),
       });
-      const projectFile = projectFileByGroup.get(project);
       if (projectFile) {
         const visibility = projectHeader.createEl('button', {
           cls: 'sprint-bases-project-visibility clickable-icon',

@@ -6,6 +6,10 @@
 
 - Display Kanban Due values as date-only `YYYY/MM/DD` labels without a time component.
 
+### Added
+
+- Added an Open project link beside each project name in Kanban views.
+
 ## 0.1.3 - 2026-08-31
 
 ### Added
