@@ -70,6 +70,11 @@
   grid-column: 5;
 }
 
+.sprint-bases-planner > .sprint-bases-project {
+  min-width: 100%;
+  width: max-content;
+}
+
 .sprint-bases-hidden-projects {
   background: color-mix(in srgb, var(--background-secondary) 45%, transparent);
   border: 1px solid var(--background-modifier-border);
@@ -124,7 +129,7 @@
 
 .sprint-bases-planner {
   min-width: 0;
-  overflow: hidden;
+  overflow-x: auto;
 }
 
 .sprint-planner-board {
@@ -132,8 +137,14 @@
   gap: var(--size-4-3);
   grid-auto-columns: minmax(240px, 300px);
   grid-auto-flow: column;
-  overflow-x: auto;
+  overflow-x: visible;
   padding-bottom: var(--size-4-2);
+}
+
+.sprint-planner-board.sprint-bases-project-board {
+  grid-template-columns: none;
+  min-width: 100%;
+  width: max-content;
 }
 
 .sprint-planner-column {
@@ -192,21 +203,8 @@
   min-height: 120px;
 }
 
-.sprint-planner-project {
-  display: grid;
-  gap: var(--size-4-2);
-}
-
-.sprint-planner-project-heading {
-  color: var(--text-muted);
-  font-size: var(--font-ui-small);
-  margin: 0;
-  overflow-wrap: anywhere;
-}
-
-.sprint-planner-project-entries {
-  display: grid;
-  gap: var(--size-4-2);
+.sprint-planner-board.sprint-bases-project-board .sprint-planner-column {
+  min-height: 220px;
 }
 
 .sprint-planner-card {
@@ -230,6 +228,7 @@
 
 .sprint-planner-card.is-updating {
   opacity: 0.7;
+  pointer-events: none;
 }
 
 .sprint-planner-card button.sprint-planner-card-title {
@@ -274,7 +273,8 @@
   color: var(--color-green);
 }
 
-.sprint-planner-sprint-select {
+.sprint-planner-sprint-select,
+.sprint-planner-project-select {
   min-width: 0;
   width: 100%;
 }

@@ -73,7 +73,7 @@ preserved.
 | View | Purpose |
 | --- | --- |
 | Sprint board | All non-archived tasks grouped first by project and then by Not started, In progress, and Done. |
-| Sprint planner | Default Tasks view. Non-archived tasks arranged across Backlog and generated sprint columns, grouped by project, for reassignment. |
+| Sprint planner | Default Tasks view. Non-archived tasks shown in project swimlanes with Backlog and generated sprint columns for reassignment. |
 | Tasks | Editable table of all task notes, including archived tasks. |
 | Current sprint | Non-archived tasks assigned to the current sprint, grouped by active projects. |
 | Next sprint | Non-archived tasks assigned to the next sprint, grouped by active projects. |
@@ -83,13 +83,19 @@ sprint views show projects that are in progress. Each project section can be
 collapsed or moved to the board's **Hidden** section. Dragging a task card between
 state columns updates the task properties.
 
-The **Sprint planner** is the default Tasks Base view. It orders generated sprint
-columns by start date, groups tasks by project within each column, and shows task
-and estimate totals for each column. Drag a task between Backlog and sprint columns
-to replace only its `sprint` assignment; project and state remain unchanged. Each
-card also has a Sprint selector for keyboard and mobile use.
+The **Sprint planner** is the default Tasks Base view. Each project is a horizontal
+swimlane containing Backlog and generated sprint columns ordered by start date. The
+planner shows task and estimate totals for its groups. Drag a task horizontally to
+change its `sprint` assignment, or vertically into another project swimlane to change
+its `project` assignment. A diagonal move can update both properties in one action;
+task state remains unchanged. Each card also provides Sprint and Project selectors for
+keyboard and mobile reassignment.
 Completed tasks are visible by default, while archived tasks remain excluded.
 Use the view's **Show completed tasks** option to hide completed work.
+
+Use **Order project groups by** in the view settings to sort project swimlanes by
+name or numeric project Priority. **Project group direction** controls ascending or
+descending order; projects without a Priority and **No project** remain at the end.
 
 #### Sprints Base
 
@@ -120,8 +126,9 @@ Projects table. Run **Sprint: Open summary** from the command palette to open it
 - Move unfinished work according to the selected rollover policy.
 - Create tasks inline from a Kanban column with project, sprint, and state context.
 - Edit task state by dragging cards between columns.
-- Plan tasks by dragging them between Backlog and generated sprint columns without
-  changing task state or project.
+- Plan tasks in project swimlanes by dragging them across Backlog and generated sprint
+  columns, or between projects. A drop updates the sprint and/or project represented by
+  its destination without changing task state.
 - Select and order the task properties shown on Kanban cards.
 - Collapse projects, hide projects, and open the underlying project note.
 - Archive tasks without deleting their notes.

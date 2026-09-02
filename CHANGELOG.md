@@ -4,8 +4,12 @@
 
 ### Changed
 
-- Made Sprint Planner the default Tasks Base view and grouped each sprint column's
-  tasks by project.
+- Changed Sprint Planner grouping to project swimlanes with Backlog and chronological
+  sprint columns. Tasks can be dragged across both projects and sprints; a drop updates
+  the destination project and/or sprint while preserving task state.
+- Added per-view project group ordering by name or Priority, with ascending and
+  descending directions, to Kanban and Sprint Planner views.
+- Made Sprint Planner the default Tasks Base view.
 - New workspaces now generate two future sprints by default, providing a provisional
   next-next sprint while keeping the horizon configurable.
 - Display Kanban Due values as date-only `YYYY/MM/DD` labels without a time component.
@@ -32,6 +36,8 @@
 
 ### Documentation
 
+- Documented the future shared Kanban component, safe Group by and Order by settings,
+  editable property boundaries, and project ordering by priority or name.
 - Added a reference for Sprint terminology, generated files, views, data properties,
   Kanban configuration, workspace renaming, reset behavior, and commands.
 - Added a documentation maintenance policy and pull request checklist for keeping

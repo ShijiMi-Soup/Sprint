@@ -2,6 +2,8 @@ import { normalizeSprintSettings } from '@/domain/SprintSettings';
 import {
   applyTaskSprintAssignment,
   applyTaskBoardState,
+  applyTaskProjectAssignment,
+  applyPlannerTaskDestination,
   applyNewTaskFrontmatter,
   createSprintBasesViewRegistration,
   createSprintVelocityViewRegistration,
@@ -12,11 +14,12 @@ import {
   getNewTaskSprintScope,
   getSprintBasesOptions,
   getTaskProjectGroup,
-  groupPlannerTasksByProject,
   openProjectNote,
   parseTaskPropertyValue,
   resolveTaskPropertyType,
   selectRecentVelocityPoints,
+  sortProjectGroups,
+  taskReferencesProject,
   taskReferencesSprint,
 } from '@/obsidian/SprintBasesView';
 
@@ -28,6 +31,8 @@ describe('SprintBasesView', () => {
       expect.objectContaining({ key: 'sprintProfile', type: 'dropdown' }),
       expect.objectContaining({ key: 'layout', type: 'dropdown' }),
       expect.objectContaining({ key: 'showCompleted', type: 'toggle' }),
+      expect.objectContaining({ key: 'groupOrder', type: 'dropdown' }),
+      expect.objectContaining({ key: 'groupOrderDirection', type: 'dropdown' }),
     ]));
     expect(getSprintBasesOptions(settings)).toEqual(expect.arrayContaining([
       expect.objectContaining({
@@ -113,6 +118,72 @@ describe('SprintBasesView', () => {
     expect(frontmatter.sprint).toEqual([]);
   });
 
+  it('reassigns a planner task project without changing its state', () => {
+    const frontmatter: Record<string, unknown> = {
+      project: ['[[Sprint/Projects/Research]]'],
+      sprint: ['[[Sprint/Sprints/Sprint 2]]'],
+      'in progress': true,
+      'is done': false,
+    };
+
+    applyTaskProjectAssignment(frontmatter, 'Sprint/Projects/Coursework');
+    expect(frontmatter).toEqual({
+      project: ['[[Sprint/Projects/Coursework]]'],
+      sprint: ['[[Sprint/Sprints/Sprint 2]]'],
+      'in progress': true,
+      'is done': false,
+    });
+
+    applyTaskProjectAssignment(frontmatter, null);
+    expect(frontmatter.project).toEqual([]);
+  });
+
+  it('moves a planner task to a sprint and project in one state-preserving operation', () => {
+    const frontmatter: Record<string, unknown> = {
+      project: ['[[Sprint/Projects/Research]]'],
+      sprint: ['[[Sprint/Sprints/Sprint 1]]'],
+      'in progress': true,
+      'is done': false,
+      estimate: 3,
+    };
+
+    applyPlannerTaskDestination(
+      frontmatter,
+      'Sprint/Sprints/Sprint 3',
+      'Sprint/Projects/Internship',
+    );
+
+    expect(frontmatter).toEqual({
+      project: ['[[Sprint/Projects/Internship]]'],
+      sprint: ['[[Sprint/Sprints/Sprint 3]]'],
+      'in progress': true,
+      'is done': false,
+      estimate: 3,
+    });
+  });
+
+  it('orders project groups alphabetically or by numeric priority', () => {
+    const groups: Array<[string, number]> = [
+      ['Research', 1],
+      ['No project', 0],
+      ['Coursework', 2],
+      ['Internship', 3],
+    ];
+    const priorities = new Map([
+      ['Research', 2],
+      ['Coursework', 1],
+    ]);
+
+    expect(sortProjectGroups(groups, priorities, 'alphabetical', 'asc').map(([name]) => name))
+      .toEqual(['Coursework', 'Internship', 'Research', 'No project']);
+    expect(sortProjectGroups(groups, priorities, 'priority', 'asc').map(([name]) => name))
+      .toEqual(['Coursework', 'Research', 'Internship', 'No project']);
+    expect(sortProjectGroups(groups, priorities, 'priority', 'desc').map(([name]) => name))
+      .toEqual(['Research', 'Coursework', 'Internship', 'No project']);
+    expect(sortProjectGroups(groups, priorities, 'alphabetical', 'desc').map(([name]) => name))
+      .toEqual(['Research', 'Internship', 'Coursework', 'No project']);
+  });
+
   it('matches planner sprint assignments by full path or sprint basename', () => {
     expect(taskReferencesSprint(
       ['[[Sprint/Sprints/Sprint 2]]'],
@@ -122,29 +193,13 @@ describe('SprintBasesView', () => {
     expect(taskReferencesSprint(['[[Sprint 3]]'], 'Sprint/Sprints/Sprint 2')).toBe(false);
   });
 
-  it('groups planner tasks by project with unassigned work last', () => {
-    const grouped = groupPlannerTasksByProject(
-      [
-        { name: 'Write abstract', project: 'Conference' },
-        { name: 'Read paper', project: 'Research' },
-        { name: 'Backlog note', project: 'No project' },
-        { name: 'Book venue', project: 'Conference' },
-      ],
-      (task) => task.project,
-      (task) => task.name,
-    );
-
-    expect(grouped).toEqual([
-      {
-        project: 'Conference',
-        tasks: [
-          { name: 'Book venue', project: 'Conference' },
-          { name: 'Write abstract', project: 'Conference' },
-        ],
-      },
-      { project: 'Research', tasks: [{ name: 'Read paper', project: 'Research' }] },
-      { project: 'No project', tasks: [{ name: 'Backlog note', project: 'No project' }] },
-    ]);
+  it('matches planner project assignments by full path or project basename', () => {
+    expect(taskReferencesProject(
+      ['[[Sprint/Projects/Research]]'],
+      'Sprint/Projects/Research',
+    )).toBe(true);
+    expect(taskReferencesProject(['[[Research]]'], 'Sprint/Projects/Research')).toBe(true);
+    expect(taskReferencesProject(['[[Coursework]]'], 'Sprint/Projects/Research')).toBe(false);
   });
 
   it('uses the native Properties order for task-card metadata', () => {

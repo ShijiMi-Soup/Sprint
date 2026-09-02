@@ -15,8 +15,8 @@ Sprint also works with AI coding agents. It can install local skills that teach 
 - Catch-up generation after Obsidian has been closed for one or more sprint cycles.
 - Configurable rollover of unfinished tasks to the current sprint, backlog, or original sprint.
 - Project-grouped Kanban boards for all, current, and next-sprint tasks.
-- A project-grouped Sprint Planner for moving tasks between the backlog and generated
-  sprints without changing project or task state.
+- A Sprint Planner with project swimlanes and Backlog/sprint columns. Drag tasks across
+  projects and sprints while preserving their task state.
 - Drag-and-drop task state changes and inline task creation.
 - Collapsible and hideable project sections.
 - Native Bases **Properties** selection for task-card fields, with Estimate and Sprint as sensible defaults.
