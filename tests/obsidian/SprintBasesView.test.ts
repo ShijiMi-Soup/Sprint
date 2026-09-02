@@ -12,6 +12,7 @@ import {
   getNewTaskSprintScope,
   getSprintBasesOptions,
   getTaskProjectGroup,
+  groupPlannerTasksByProject,
   openProjectNote,
   parseTaskPropertyValue,
   resolveTaskPropertyType,
@@ -119,6 +120,31 @@ describe('SprintBasesView', () => {
     )).toBe(true);
     expect(taskReferencesSprint(['[[Sprint 2]]'], 'Sprint/Sprints/Sprint 2')).toBe(true);
     expect(taskReferencesSprint(['[[Sprint 3]]'], 'Sprint/Sprints/Sprint 2')).toBe(false);
+  });
+
+  it('groups planner tasks by project with unassigned work last', () => {
+    const grouped = groupPlannerTasksByProject(
+      [
+        { name: 'Write abstract', project: 'Conference' },
+        { name: 'Read paper', project: 'Research' },
+        { name: 'Backlog note', project: 'No project' },
+        { name: 'Book venue', project: 'Conference' },
+      ],
+      (task) => task.project,
+      (task) => task.name,
+    );
+
+    expect(grouped).toEqual([
+      {
+        project: 'Conference',
+        tasks: [
+          { name: 'Book venue', project: 'Conference' },
+          { name: 'Write abstract', project: 'Conference' },
+        ],
+      },
+      { project: 'Research', tasks: [{ name: 'Read paper', project: 'Research' }] },
+      { project: 'No project', tasks: [{ name: 'Backlog note', project: 'No project' }] },
+    ]);
   });
 
   it('uses the native Properties order for task-card metadata', () => {

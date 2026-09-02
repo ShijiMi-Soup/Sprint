@@ -4,6 +4,10 @@
 
 ### Changed
 
+- Made Sprint Planner the default Tasks Base view and grouped each sprint column's
+  tasks by project.
+- New workspaces now generate two future sprints by default, providing a provisional
+  next-next sprint while keeping the horizon configurable.
 - Display Kanban Due values as date-only `YYYY/MM/DD` labels without a time component.
 - Build the inline New task form from each Kanban view's visible editable note
   properties and preserve their Properties-selector order.

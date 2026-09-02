@@ -278,8 +278,8 @@ function tasksBaseContent(
     `${root}/Tasks`,
     taskBaseProperties(),
     [
-      ...sprintView(resolved.id, 'Sprint board', 'kanban', true),
       ...sprintView(resolved.id, 'Sprint planner', 'planner', true),
+      ...sprintView(resolved.id, 'Sprint board', 'kanban', true),
       ...tableView('Tasks', [
         'file.name',
         'formula.task_state',
@@ -431,6 +431,24 @@ export function migrateTasksBaseContent(content: string, profileId: string): str
         delete view[key];
         changed = true;
       }
+    }
+    const plannerIndex = base.views.findIndex((candidate) => (
+      asRecord(candidate)?.name === 'Sprint planner'
+    ));
+    const firstView = asRecord(base.views[0]);
+    const firstOrder = firstView?.order;
+    const hasLegacyDefaultFirstView = firstView?.name === 'Sprint board'
+      && firstView.layout === 'kanban'
+      && Array.isArray(firstOrder)
+      && firstOrder.length === 4
+      && firstOrder.every((property, index) => (
+        property === ['file.name', 'note.estimate', 'note.due', 'note.sprint'][index]
+    ));
+    if (plannerIndex > 0 && hasLegacyDefaultFirstView) {
+      const planner: unknown = base.views[plannerIndex];
+      base.views.splice(plannerIndex, 1);
+      base.views.unshift(planner);
+      changed = true;
     }
     return changed;
   });

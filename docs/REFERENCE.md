@@ -73,7 +73,7 @@ preserved.
 | View | Purpose |
 | --- | --- |
 | Sprint board | All non-archived tasks grouped first by project and then by Not started, In progress, and Done. |
-| Sprint planner | Non-archived tasks arranged across Backlog and generated sprint columns for reassignment. |
+| Sprint planner | Default Tasks view. Non-archived tasks arranged across Backlog and generated sprint columns, grouped by project, for reassignment. |
 | Tasks | Editable table of all task notes, including archived tasks. |
 | Current sprint | Non-archived tasks assigned to the current sprint, grouped by active projects. |
 | Next sprint | Non-archived tasks assigned to the next sprint, grouped by active projects. |
@@ -83,10 +83,11 @@ sprint views show projects that are in progress. Each project section can be
 collapsed or moved to the board's **Hidden** section. Dragging a task card between
 state columns updates the task properties.
 
-The **Sprint planner** orders generated sprint columns by start date and shows
-task and estimate totals for each column. Drag a task between Backlog and sprint
-columns to replace only its `sprint` assignment; project and state remain
-unchanged. Each card also has a Sprint selector for keyboard and mobile use.
+The **Sprint planner** is the default Tasks Base view. It orders generated sprint
+columns by start date, groups tasks by project within each column, and shows task
+and estimate totals for each column. Drag a task between Backlog and sprint columns
+to replace only its `sprint` assignment; project and state remain unchanged. Each
+card also has a Sprint selector for keyboard and mobile use.
 Completed tasks are visible by default, while archived tasks remain excluded.
 Use the view's **Show completed tasks** option to hide completed work.
 
@@ -111,7 +112,9 @@ Projects table. Run **Sprint: Open summary** from the command palette to open it
 
 ### Sprint features
 
-- Generate current and future sprint notes on a configurable 1-8 week cadence.
+- Generate current and future sprint notes on a configurable 1-8 week cadence. New
+  workspaces keep the next two sprints available by default so the second future
+  sprint can hold provisional work without committing it to the immediate next sprint.
 - Catch up after Obsidian has been closed for one or more sprint cycles.
 - Mark generated sprint notes as `last`, `current`, `next`, `past`, or `future`.
 - Move unfinished work according to the selected rollover policy.

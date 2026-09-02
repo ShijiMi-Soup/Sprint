@@ -31,12 +31,12 @@ const DEFAULTS: SprintDefaults = {
   durationWeeks: 1,
   startDay: 1,
   incompleteTaskPolicy: 'next',
-  futureSprintCount: 1,
+  futureSprintCount: 2,
   namingFormat: 'Sprint {number}',
 };
 
 // Increment when an upgrade must rerun Base or support-file migrations.
-export const CURRENT_SUPPORT_SCHEMA_VERSION = 4;
+export const CURRENT_SUPPORT_SCHEMA_VERSION = 5;
 
 function profileForRoot(rootFolder: string, anchorDate = ''): SprintProfile {
   const root = rootFolder.trim().replace(/^\/+|\/+$/g, '') || 'Sprint';

@@ -188,8 +188,25 @@
 .sprint-planner-entries {
   align-content: start;
   display: grid;
-  gap: var(--size-4-2);
+  gap: var(--size-4-4);
   min-height: 120px;
+}
+
+.sprint-planner-project {
+  display: grid;
+  gap: var(--size-4-2);
+}
+
+.sprint-planner-project-heading {
+  color: var(--text-muted);
+  font-size: var(--font-ui-small);
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.sprint-planner-project-entries {
+  display: grid;
+  gap: var(--size-4-2);
 }
 
 .sprint-planner-card {

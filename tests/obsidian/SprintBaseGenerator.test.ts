@@ -318,7 +318,7 @@ describe('SprintBaseGenerator', () => {
     expect(written.get('.agents/skills/sprint/SKILL.md')).toContain('Use Fibonacci estimates only.');
     expect(written.get('.claude/skills/sprint/SKILL.md')).toContain('Use Fibonacci estimates only.');
     const tasksBase = written.get('Agile PM/Tasks.base') ?? '';
-    expect(tasksBase.indexOf('name: "Sprint board"')).toBeLessThan(tasksBase.indexOf('name: "Tasks"'));
+    expect(tasksBase.indexOf('name: "Sprint planner"')).toBeLessThan(tasksBase.indexOf('name: "Sprint board"'));
     expect(tasksBase).not.toContain('newTaskProperty1:');
     expect(tasksBase).not.toContain('newTaskProperty2:');
     expect(tasksBase).toContain('      - note.estimate');
@@ -337,6 +337,7 @@ describe('SprintBaseGenerator', () => {
     expect(taskViews.find(({ name }) => name === 'Sprint planner')).toEqual(expect.objectContaining({
       order: ['file.name', 'note.project', 'note.estimate', 'note.due'],
     }));
+    expect(taskViews[0]?.name).toBe('Sprint planner');
     expect(taskViews.find(({ name }) => name === 'Current sprint')?.order)
       .toEqual(['file.name', 'note.estimate', 'note.due']);
     expect(taskViews.find(({ name }) => name === 'Next sprint')?.order)
@@ -437,6 +438,46 @@ describe('SprintBaseGenerator', () => {
     ].join('\n'), 'Sprint/Tasks');
     expect(moved).toContain('file.inFolder("Sprint/Tasks")');
     expect(moved).toContain('file.ext == "md"');
+  });
+
+  it('makes Sprint planner first only for the previous generated default ordering', () => {
+    const migrated = migrateTasksBaseContent([
+      'properties:',
+      '  file.name:',
+      '    displayName: Task',
+      'views:',
+      '  - type: sprint-agent-sprint-board',
+      '    name: Sprint board',
+      '    filters:',
+      '      and:',
+      '        - note.archived != true',
+      '    order:',
+      '      - file.name',
+      '      - note.estimate',
+      '      - note.due',
+      '      - note.sprint',
+      '    sprintProfile: agile-pm',
+      '    layout: kanban',
+      '    showCompleted: true',
+      '  - type: sprint-agent-sprint-board',
+      '    name: Sprint planner',
+      '    filters:',
+      '      and:',
+      '        - note.archived != true',
+      '    order:',
+      '      - file.name',
+      '      - note.project',
+      '      - note.estimate',
+      '      - note.due',
+      '    sprintProfile: agile-pm',
+      '    layout: planner',
+      '    showCompleted: true',
+      '',
+    ].join('\n'), 'agile-pm');
+    const parsed = parse(migrated) as { views: Array<{ name: string }> };
+
+    expect(parsed.views.map(({ name }) => name)).toEqual(['Sprint planner', 'Sprint board']);
+    expect(migrateTasksBaseContent(migrated, 'agile-pm')).toBe(migrated);
   });
 
   it('adds Due only to previous untouched Kanban property defaults', () => {

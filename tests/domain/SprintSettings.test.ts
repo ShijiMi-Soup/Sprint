@@ -4,6 +4,10 @@ import {
 } from '@/domain/SprintSettings';
 
 describe('SprintSettings', () => {
+  it('creates two future sprints by default', () => {
+    expect(normalizeSprintSettings({}).defaults.futureSprintCount).toBe(2);
+  });
+
   it('uses Sprint as the default folder and profile name', () => {
     const settings = normalizeSprintSettings(undefined);
 
