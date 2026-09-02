@@ -25,8 +25,7 @@ before merging or releasing.
 
 ## Subagents
 
-Reusable project-scoped Codex agents are defined in `.codex/agents/`. Follow
-`docs/DEVELOPMENT_AGENTS.md`: delegate bounded work with explicit acceptance criteria,
-file ownership, non-goals, and test expectations; avoid overlapping parallel writes;
-keep architecture, integration, final verification, and external release actions with
-the primary agent.
+The Sol primary agent handles normal development and final decisions. Two optional,
+project-scoped agents are defined in `.codex/agents/`: a Terra reviewer for high-risk
+changes and releases, and a Luna documentation agent for substantial documentation
+work. Follow `docs/DEVELOPMENT_AGENTS.md`; do not delegate routine implementation.
