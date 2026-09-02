@@ -2,6 +2,13 @@ import type { App, TFile } from 'obsidian';
 import { normalizePath, parseYaml, stringifyYaml } from 'obsidian';
 
 import { resolveSprintProfile } from '../domain/SprintSettings';
+import {
+  addDays,
+  getCurrentSprintStart,
+  getLocalDate,
+  getSprintEnd,
+  getWeekStart,
+} from '../domain/SprintSchedule';
 import type { SprintProfile, SprintSettings } from '../domain/types';
 import { SPRINT_BASES_VIEW_TYPE, SPRINT_VELOCITY_VIEW_TYPE } from './SprintBasesView';
 
@@ -223,6 +230,7 @@ function sprintView(
     '    order:',
     '      - file.name',
     '      - note.estimate',
+    '      - note.due',
     ...(!sprintScope ? ['      - note.sprint'] : []),
     `    sprintProfile: ${yamlString(profileId)}`,
     ...(sprintScope ? [`    sprintScope: ${yamlString(sprintScope)}`] : []),
@@ -386,6 +394,20 @@ export function migrateTasksBaseContent(content: string, profileId: string): str
         view.order = ['file.name', ...(
           legacyCardProperties.length > 0 ? legacyCardProperties : defaultCardProperties
         )];
+        changed = true;
+      }
+      const oldDefaultOrder = view.name === 'Sprint board'
+        ? ['file.name', 'note.estimate', 'note.sprint']
+        : view.name === 'Current sprint' || view.name === 'Next sprint'
+          ? ['file.name', 'note.estimate']
+          : null;
+      if (
+        oldDefaultOrder
+        && Array.isArray(view.order)
+        && view.order.length === oldDefaultOrder.length
+        && view.order.every((property, index) => property === oldDefaultOrder[index])
+      ) {
+        view.order.splice(2, 0, 'note.due');
         changed = true;
       }
       if (view.newTaskProperty1 === undefined) {
@@ -555,7 +577,10 @@ function definitionsForProfile(settings: SprintSettings, profile: SprintProfile)
 }
 
 export class SprintBaseGenerator {
-  constructor(private readonly app: App) {}
+  constructor(
+    private readonly app: App,
+    private readonly getToday: () => string = getLocalDate,
+  ) {}
 
   async generate(settings: SprintSettings): Promise<SprintBaseGenerationResult> {
     const result: SprintBaseGenerationResult = {
@@ -779,11 +804,22 @@ export class SprintBaseGenerator {
     const resolved = resolveSprintProfile(settings, profile);
     const root = normalizeFolder(resolved.rootFolder);
     if (!root) return;
+    const today = this.getToday();
+    const durationWeeks = Math.min(8, Math.max(1, Math.round(resolved.durationWeeks)));
+    const anchorDate = resolved.anchorDate || getWeekStart(today, resolved.startDay);
+    const currentStart = getCurrentSprintStart(anchorDate, durationWeeks, today);
 
     const previousSamples = new Map(
-      this.sampleNotes(root, resolved.namingFormat, 'legacy').map((note) => [note.path, note]),
+      this.sampleNotes(root, resolved.namingFormat, 'legacy', currentStart, durationWeeks)
+        .map((note) => [note.path, note]),
     );
-    for (const note of this.sampleNotes(root, resolved.namingFormat, 'current')) {
+    for (const note of this.sampleNotes(
+      root,
+      resolved.namingFormat,
+      'current',
+      currentStart,
+      durationWeeks,
+    )) {
       const existing = this.app.vault.getFileByPath(note.path);
       if (existing) {
         const previous = previousSamples.get(note.path);
@@ -812,16 +848,21 @@ export class SprintBaseGenerator {
     root: string,
     namingFormat: string,
     version: SampleVersion,
+    currentStart: string,
+    durationWeeks: number,
   ): SampleNote[] {
     const sprintName = (number: number): string => (
       namingFormat.replaceAll('{number}', String(number)).trim() || `Sprint ${number}`
     );
     const sprintOne = sprintName(1);
     const sprintTwo = sprintName(2);
+    const nextStart = addDays(currentStart, durationWeeks * 7);
     const sprintProperty = (name: string): string[] => version === 'current'
       ? ['sprint:', `  - "[[${name}]]"`]
       : [];
-    const dueProperty = version === 'current' ? ['due:'] : [];
+    const dueProperty = (date: string): string[] => version === 'current'
+      ? [`due: ${date}`]
+      : [];
     const notes: SampleNote[] = [
       {
         path: `${root}/Projects/Welcome to Agile PM.md`,
@@ -864,7 +905,7 @@ export class SprintBaseGenerator {
         content: frontmatterNote(
           [
             'estimate: 1',
-            ...dueProperty,
+            ...dueProperty(currentStart),
             'in progress: false',
             'is done: false',
             ...(version === 'current' ? ['archived: false'] : []),
@@ -885,7 +926,7 @@ export class SprintBaseGenerator {
         content: frontmatterNote(
           [
             'estimate: 2',
-            ...dueProperty,
+            ...dueProperty(addDays(currentStart, 1)),
             'in progress: false',
             'is done: false',
             ...(version === 'current' ? ['archived: false'] : []),
@@ -908,7 +949,7 @@ export class SprintBaseGenerator {
         content: frontmatterNote(
           [
             'estimate: 3',
-            ...dueProperty,
+            ...dueProperty(addDays(currentStart, 2)),
             'in progress: true',
             'is done: false',
             ...(version === 'current' ? ['archived: false'] : []),
@@ -929,7 +970,7 @@ export class SprintBaseGenerator {
         content: frontmatterNote(
           [
             'estimate: 1',
-            ...dueProperty,
+            ...dueProperty(addDays(currentStart, 3)),
             'in progress: false',
             'is done: true',
             ...(version === 'current' ? ['archived: false'] : []),
@@ -950,7 +991,7 @@ export class SprintBaseGenerator {
         content: frontmatterNote(
           [
             'estimate: 2',
-            ...dueProperty,
+            ...dueProperty(getSprintEnd(currentStart, durationWeeks)),
             'in progress: false',
             'is done: false',
             ...(version === 'current' ? ['archived: false'] : []),
@@ -975,7 +1016,7 @@ export class SprintBaseGenerator {
           content: frontmatterNote(
             [
               'estimate: 2',
-              'due:',
+              `due: ${addDays(nextStart, 1)}`,
               'in progress: false',
               'is done: false',
               'archived: false',
@@ -996,7 +1037,7 @@ export class SprintBaseGenerator {
           content: frontmatterNote(
             [
               'estimate: 3',
-              'due:',
+              `due: ${addDays(nextStart, 3)}`,
               'in progress: false',
               'is done: false',
               'archived: false',

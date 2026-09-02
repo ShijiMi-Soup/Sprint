@@ -9,6 +9,8 @@
 ### Added
 
 - Added an Open project link beside each project name in Kanban views.
+- Added sprint-relative due dates to all generated tutorial tasks.
+- Show Due on default Kanban cards and use a calendar icon instead of a text label.
 
 ## 0.1.3 - 2026-08-31
 

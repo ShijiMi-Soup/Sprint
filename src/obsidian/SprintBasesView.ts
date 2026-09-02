@@ -722,10 +722,16 @@ class SprintBasesView extends BasesView {
       const displayValue = formatTaskCardProperty(property, value);
       if (!displayValue) continue;
       const label = this.config.getDisplayName(propertyId);
-      meta.createSpan({
-        cls: 'sprint-bases-entry-property',
-        text: property === 'sprint' ? displayValue : `${label}: ${displayValue}`,
-      });
+      const badge = meta.createSpan({ cls: 'sprint-bases-entry-property' });
+      if (property === 'due' || property === 'due date') {
+        const icon = badge.createSpan({ cls: 'sprint-bases-entry-property-icon' });
+        setIcon(icon, 'calendar-days');
+        badge.createSpan({ text: displayValue });
+      } else {
+        badge.createSpan({
+          text: property === 'sprint' ? displayValue : `${label}: ${displayValue}`,
+        });
+      }
       renderedMetadata = true;
     }
     if (!renderedMetadata) meta.remove();

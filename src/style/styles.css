@@ -330,12 +330,21 @@ body .sprint-bases-view button.sprint-bases-entry {
 }
 
 .sprint-bases-view .sprint-bases-entry-property {
+  align-items: center;
   background: color-mix(in srgb, var(--text-muted) 9%, transparent);
   border: 1px solid color-mix(in srgb, var(--text-muted) 20%, transparent);
   border-radius: 4px;
   color: var(--text-muted);
+  display: inline-flex;
+  gap: var(--size-2-2);
   line-height: 1.4;
   padding: 1px var(--size-4-2);
+}
+
+.sprint-bases-entry-property-icon,
+.sprint-bases-entry-property-icon svg {
+  height: 12px;
+  width: 12px;
 }
 
 .sprint-bases-view .sprint-bases-entry-points-low {
