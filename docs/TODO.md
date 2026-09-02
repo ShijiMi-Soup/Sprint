@@ -12,6 +12,17 @@
   creation should remain available only for a genuinely new workspace or an explicit
   destructive reset confirmed by the user.
 
+## Workspace relocation
+
+- [ ] Detect or safely recover from a Sprint workspace folder renamed outside the
+  Sprint settings UI. While Obsidian is running, prefer the vault rename event to
+  update the configured workspace and Base paths without scanning every vault file.
+  For renames performed while Obsidian is closed or the plugin is disabled, provide an
+  explicit **Locate moved workspace** recovery action. Do not rely on a hidden marker
+  file unless Obsidian's supported Vault API can read and move it consistently on
+  desktop and mobile. Prevent automatic synchronization from silently recreating the
+  old workspace path when a configured root is missing.
+
 ## Progress reminders
 
 - [ ] Design an optional Duolingo-style reminder system that helps users maintain their

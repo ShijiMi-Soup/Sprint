@@ -61,6 +61,9 @@ In Obsidian, open **Settings -> Community plugins -> Browse**, search for **Spri
 
 For screenshots and the complete first-time setup, see the [English installation guide](docs/INSTALLATION.md) or [Japanese installation guide](docs/INSTALLATION_ja.md).
 
+For workspace concepts, generated files, views, properties, reset instructions,
+and troubleshooting, see the [Sprint reference](docs/REFERENCE.md).
+
 ### Community Plugins
 
 1. Open **Settings -> Community plugins**.

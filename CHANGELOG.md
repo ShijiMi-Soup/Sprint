@@ -12,6 +12,16 @@
 - Added sprint-relative due dates to all generated tutorial tasks.
 - Show Due on default Kanban cards and use a calendar icon instead of a text label.
 
+### Documentation
+
+- Added a reference for Sprint terminology, generated files, views, data properties,
+  Kanban configuration, workspace renaming, reset behavior, and commands.
+- Added a documentation maintenance policy and pull request checklist for keeping
+  user-facing docs synchronized with code changes.
+- Documented a proposed VitePress and GitHub Pages publication workflow.
+- Added reusable project-scoped Codex agents for implementation, data safety, read-only
+  QA review, and documentation/release preparation, plus delegation guidance.
+
 ## 0.1.3 - 2026-08-31
 
 ### Added

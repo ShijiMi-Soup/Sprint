@@ -13,3 +13,20 @@ Sprint is provider-independent sprint-management software for Obsidian. It must 
 ## Verification
 
 Run `npm run check` before release. Tests mirror domain and Obsidian ownership under `tests/`.
+
+## Documentation
+
+Documentation is part of every user-visible change. When behavior, settings,
+commands, generated files, properties, views, migrations, or AI instructions
+change, review and update `docs/REFERENCE.md`, the relevant installation guides,
+both READMEs, `CHANGELOG.md`, `docs/TODO.md`, and `docs/AGENT_GUIDE.md` as
+applicable. Follow `docs/DOCUMENTATION_MAINTENANCE.md` and run `npm run check`
+before merging or releasing.
+
+## Subagents
+
+Reusable project-scoped Codex agents are defined in `.codex/agents/`. Follow
+`docs/DEVELOPMENT_AGENTS.md`: delegate bounded work with explicit acceptance criteria,
+file ownership, non-goals, and test expectations; avoid overlapping parallel writes;
+keep architecture, integration, final verification, and external release actions with
+the primary agent.
