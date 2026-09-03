@@ -104,6 +104,8 @@ describe('SprintFeature', () => {
     expect((host as unknown as { addCommand: jest.Mock }).addCommand)
       .toHaveBeenCalledWith(expect.objectContaining({ id: 'generate-bases' }));
     expect((host as unknown as { addCommand: jest.Mock }).addCommand)
+      .toHaveBeenCalledWith(expect.objectContaining({ id: 'generate-future' }));
+    expect((host as unknown as { addCommand: jest.Mock }).addCommand)
       .toHaveBeenCalledWith(expect.objectContaining({ id: 'open-summary' }));
     expect((host as unknown as { addCommand: jest.Mock }).addCommand)
       .toHaveBeenCalledWith(expect.objectContaining({ id: 'open-planner' }));

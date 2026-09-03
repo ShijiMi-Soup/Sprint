@@ -52,7 +52,9 @@ The dependency-free Velocity view charts completed story points for every genera
 
 ### Review active sprints
 
-Sprint overview cards show the last, current, and next sprint with dates, completed tasks, completed points, and review status.
+Sprint overview cards show active and generated future sprints with dates, completed
+tasks, completed points, and review status. Use **Add Sprint N** in the overview or
+planner to extend the planning horizon by one sprint.
 
 ![Sprint overview cards for the last, current, and next sprint](docs/images/sprint-overview.png)
 
@@ -162,6 +164,7 @@ Sprint does not send vault content over the network or invoke an AI model. Exter
   of the Tasks Base's default view.
 - **Sprint: Sync sprints** creates missing sprint notes, updates lifecycle states, and applies rollover rules.
 - **Sprint: Generate sprint Bases** creates missing support files and applies managed Base schema updates.
+- **Sprint: Generate future** creates one additional sprint after the latest generated sprint without changing the automatic horizon.
 
 ## Development
 

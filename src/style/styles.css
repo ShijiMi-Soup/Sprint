@@ -142,7 +142,9 @@
 }
 
 .sprint-planner-board.sprint-bases-project-board {
-  grid-template-columns: none;
+  grid-template-columns:
+    repeat(var(--sprint-planner-column-count), minmax(240px, 300px))
+    56px;
   min-width: 100%;
   width: max-content;
 }
@@ -273,10 +275,24 @@
   color: var(--color-green);
 }
 
-.sprint-planner-sprint-select,
-.sprint-planner-project-select {
+.sprint-planner-sprint-select {
   min-width: 0;
   width: 100%;
+}
+
+.sprint-planner-add-column {
+  display: flex;
+  height: 100%;
+}
+
+.sprint-add-sprint-button {
+  align-items: center;
+  display: inline-flex;
+  gap: var(--size-4-1);
+}
+
+.sprint-add-sprint-icon {
+  display: inline-flex;
 }
 
 .sprint-bases-entries {
@@ -435,10 +451,28 @@ body .sprint-bases-view button.sprint-bases-entry {
   margin: 0 0 var(--size-4-2);
 }
 
+.sprint-bases-content.sprint-overview {
+  align-items: stretch;
+  display: flex;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  padding-bottom: var(--size-4-2);
+}
+
+.sprint-overview > .sprint-overview-group {
+  display: flex;
+  flex-direction: column;
+}
+
+.sprint-overview > .sprint-overview-group:not(.sprint-overview-add-group) {
+  flex: var(--sprint-overview-card-count) 0 var(--sprint-overview-group-width);
+}
+
 .sprint-overview-cards {
   display: grid;
+  flex: 1;
   gap: var(--size-4-3);
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  grid-template-columns: repeat(var(--sprint-overview-card-count), minmax(220px, 1fr));
 }
 
 .sprint-overview-card {
@@ -447,7 +481,39 @@ body .sprint-bases-view button.sprint-bases-entry {
   border-radius: 8px;
   display: grid;
   gap: var(--size-4-2);
+  height: 100%;
   padding: var(--size-4-3);
+}
+
+.sprint-overview-add-card {
+  display: flex;
+  flex: 1;
+  height: 100%;
+}
+
+.sprint-overview-add-group {
+  flex: 0 0 56px;
+}
+
+body .sprint-bases-view button.sprint-overview-add-button,
+body .sprint-bases-view button.sprint-planner-add-button {
+  align-items: center;
+  background: var(--background-secondary);
+  border: 1px solid transparent;
+  border-radius: 8px;
+  color: var(--text-muted);
+  height: 100%;
+  justify-content: center;
+  min-height: 0;
+  padding: 0;
+  width: 100%;
+}
+
+body .sprint-bases-view button.sprint-overview-add-button:hover,
+body .sprint-bases-view button.sprint-planner-add-button:hover {
+  background: var(--background-modifier-hover);
+  border-color: var(--background-modifier-border);
+  color: var(--text-normal);
 }
 
 .sprint-overview-card button.sprint-overview-title {
@@ -527,6 +593,12 @@ body .sprint-bases-view button.sprint-bases-entry {
 .sprint-bases-entry-property-icon svg {
   height: 12px;
   width: 12px;
+}
+
+.sprint-overview-add-button .sprint-add-sprint-icon svg,
+.sprint-planner-add-button .sprint-add-sprint-icon svg {
+  height: 24px;
+  width: 24px;
 }
 
 .sprint-bases-view .sprint-bases-entry-points-low {

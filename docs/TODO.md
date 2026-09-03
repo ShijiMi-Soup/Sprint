@@ -49,10 +49,10 @@
 
 ## Task planning and board configuration
 
-- [ ] Replace the plain project task count shown beside each Kanban project name with
-  **completed tasks / total tasks completed** (for example, `3/9 completed`). Define
-  whether archived tasks are excluded, keep the value synchronized after drag-and-drop
-  state changes and inline task creation, and use an accessible label on narrow screens.
+- [x] Replace the plain project task count shown beside each Kanban project name with
+  **completed tasks / total tasks completed** (for example, `3/9 completed`). Archived
+  and filtered-out tasks are excluded. Keep the value synchronized after drag-and-drop
+  state changes and use an accessible label on narrow screens.
 - [x] Add a `due` date property to newly created task notes and the generated Tasks Base
   schema. Show Due by default in the inline task editor opened from a Kanban lane's
   **New task** button. Preserve existing task notes that do not have a due date, and use
@@ -62,31 +62,22 @@
   columns, support drag-and-drop across both projects and sprints without changing task
   state, show useful capacity or estimate totals, and confirm behavior for unassigned,
   archived, and completed tasks before implementation.
-- [ ] Optionally derive a task's Sprint assignment from its Due date. Match the due date
-  to the sprint whose date range contains it, create the required sprint note when that
-  range has not been generated yet, and define how manual Sprint assignments, cleared
-  due dates, disabled automatic sprints, and out-of-cadence dates should behave before
-  enabling automation.
 - [x] Integrate the native Base **Properties** selector with the custom Kanban views so
   users can choose which task properties appear on cards. Changes should apply to Sprint
   board, Current sprint, and Next sprint views as appropriate, preserve property order,
   avoid duplicating the task title, and continue to use sensible defaults for newly
   generated Bases.
-- [ ] Extract a shared generic Kanban component for Sprint board, Current sprint, Next
-  sprint, and Sprint planner views. Add safe per-view **Group by** and **Order by**
-  settings without changing existing view behavior during migration. Grouping must only
-  mutate supported editable note properties when cards move between groups: text,
-  number, checkbox, date/date-time, list, tags, and links. Keep formulas, file metadata,
-  titles, derived state, archive controls, and other computed or plugin-controlled
-  values read-only. Define behavior for empty and multi-value groups, invalid links,
-  drag-and-drop across two dimensions, mobile/keyboard alternatives, and preserving
-  unknown custom view settings. For project grouping, support deterministic alphabetical
-  and project-priority ordering, ascending/descending direction, missing priorities,
-  tie-breaking, hidden projects, and per-view versus shared settings.
+- [x] Extract a shared generic Kanban component for Sprint board, Current sprint, Next
+  sprint, and Sprint planner views. Safe per-view **Group by** and **Order by** settings
+  preserve Project as the migration default. Grouping mutates editable note properties;
+  formulas, file metadata, derived state, and archive controls remain unavailable.
+  Empty groups are explicit, multi-value groups use their first value, and cross-group
+  moves replace that grouped value while preserving later values. Linked-note groups support deterministic numeric
+  property ordering with alphabetical tie-breaking and ascending/descending direction.
 
 ## AI skills
 
-- [ ] Audit and update the generated `sprint-vault` skills when Sprint workflows or
+- [x] Audit and update the generated `sprint-vault` skills when Sprint workflows or
   schemas change. Cover the Sprint planner, project and sprint reassignment, current
   task/project/sprint properties, workspace recovery, and future ceremony features
   where agent guidance is useful. Keep generated skills provider-independent, preserve

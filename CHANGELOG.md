@@ -2,8 +2,30 @@
 
 ## Unreleased
 
+## 0.2.0 - 2026-09-03
+
 ### Changed
 
+- Hide past sprint columns and their assigned tasks from Sprint Planner by default;
+  add a **Show past sprints** view option for historical replanning.
+- Keep Sprint Planner moves within their existing project swimlane when short and
+  vault-relative project links resolve to the same project file.
+- Place the Sprint overview's add-sprint action after the sprint cards and style it as a
+  subdued, narrow plus button matching the sprint cards' height.
+- Place the same narrow add-sprint control after the furthest sprint column in each
+  Sprint Planner project row.
+- Order Sprint overview groups as current, next, then future; render all future sprint
+  cards in the same horizontal row before the add-sprint button.
+- Added shared configurable task swimlanes across Kanban and Sprint Planner views.
+  Views can group by safe editable note properties and order linked-note groups by a
+  selected numeric property. Cross-group drops update the selected grouping property.
+- Replaced project task counts with `completed/total completed` progress labels.
+- Added **Add Sprint N** controls to Sprint planner and Sprint overview, and included
+  generated future sprints in both views.
+- Removed the redundant per-card Project selector from Sprint planner; project
+  assignment remains represented by swimlanes and cross-project drag-and-drop.
+- Updated generated Sprint skills for planner assignment, configurable grouping,
+  scoped task creation, workspace recovery, and future-sprint generation.
 - Changed Sprint Planner grouping to project swimlanes with Backlog and chronological
   sprint columns. Tasks can be dragged across both projects and sprints; a drop updates
   the destination project and/or sprint while preserving task state.
@@ -20,6 +42,8 @@
 
 ### Added
 
+- Added a **Generate future** command and **Generate future sprint** settings action that creates one sprint
+  after the latest generated sprint using the configured cadence and next number.
 - Added an **Open planner** command that targets the configured Tasks Base's
   Sprint Planner view without depending on its default view.
 - Added a Sprint Planner view with Backlog and chronological sprint columns,

@@ -120,6 +120,44 @@ describe('SprintManager', () => {
     expect(vault.listMarkdownNotes('Agile PM/Sprints')).toHaveLength(2);
   });
 
+  it('generates one sprint after the latest sprint without changing the automatic horizon', async () => {
+    const vault = new MemorySprintVault();
+    const manager = new SprintManager(vault, () => settings(), () => '2026-08-07');
+
+    const [first, second] = await Promise.all([
+      manager.generateFutureSprint('agile-pm'),
+      manager.generateFutureSprint('agile-pm'),
+    ]);
+
+    expect(first).toMatchObject({
+      created: true,
+      sprintNumber: 3,
+      startDate: '2026-08-17',
+      note: { path: 'Agile PM/Sprints/Sprint 3.md', basename: 'Sprint 3' },
+    });
+    expect(second).toMatchObject({
+      sprintNumber: 4,
+      startDate: '2026-08-24',
+      note: { path: 'Agile PM/Sprints/Sprint 4.md', basename: 'Sprint 4' },
+    });
+    expect(vault.notes.get('Agile PM/Sprints/Sprint 4.md')?.frontmatter).toMatchObject({
+      'sprint status': 'future',
+      'end date': '2026-08-30',
+    });
+    expect(settings().defaults.futureSprintCount).toBe(1);
+  });
+
+  it('rejects explicit future generation when sprint names cannot stay unique', async () => {
+    const vault = new MemorySprintVault();
+    const customSettings = settings({
+      profiles: [profile({ overrides: { namingFormat: 'Cycle' } })],
+    });
+    const manager = new SprintManager(vault, () => customSettings, () => '2026-08-07');
+
+    await expect(manager.generateFutureSprint('agile-pm'))
+      .rejects.toThrow('Sprint naming must include {number}');
+  });
+
   it('repairs empty existing sprint files instead of failing creation', async () => {
     const vault = new MemorySprintVault();
     vault.notes.set('Agile PM/Sprints/Sprint 1.md', { frontmatter: {}, body: '' });

@@ -1,6 +1,10 @@
 import { Notice, type Plugin } from 'obsidian';
 
-import { SprintManager, type SprintSyncResult } from './domain/SprintManager';
+import {
+  SprintManager,
+  type FutureSprintGenerationResult,
+  type SprintSyncResult,
+} from './domain/SprintManager';
 import { CURRENT_SUPPORT_SCHEMA_VERSION } from './domain/SprintSettings';
 import type { SprintSettings } from './domain/types';
 import { SprintBaseGenerator, type SprintBaseGenerationResult } from './obsidian/SprintBaseGenerator';
@@ -27,6 +31,7 @@ export interface SprintFeatureApi {
   readonly settings: Readonly<SprintSettings>;
   sync(): Promise<SprintSyncResult>;
   generateBases(): Promise<SprintBaseGenerationResult>;
+  generateFutureSprint(): Promise<FutureSprintGenerationResult>;
   resetProfile(profileId: string): Promise<SprintSyncResult>;
   renameProfileRoot(profileId: string, rootFolder: string): Promise<void>;
   openOnboarding(): void;
@@ -61,7 +66,10 @@ export class SprintFeature implements SprintFeatureApi {
 
     this.plugin.registerBasesView(
       SPRINT_BASES_VIEW_TYPE,
-      createSprintBasesViewRegistration(() => this.currentSettings),
+      createSprintBasesViewRegistration(
+        () => this.currentSettings,
+        () => this.generateFutureSprint(),
+      ),
     );
     this.plugin.registerBasesView(
       SPRINT_VELOCITY_VIEW_TYPE,
@@ -80,6 +88,11 @@ export class SprintFeature implements SprintFeatureApi {
       id: 'generate-bases',
       name: 'Generate bases',
       callback: () => { void this.generateBasesWithNotice(); },
+    });
+    this.plugin.addCommand({
+      id: 'generate-future',
+      name: 'Generate future',
+      callback: () => { void this.generateFutureSprintWithNotice(); },
     });
     this.plugin.addCommand({
       id: 'open-summary',
@@ -128,6 +141,11 @@ export class SprintFeature implements SprintFeatureApi {
       });
     }
     return result;
+  }
+
+  async generateFutureSprint(): Promise<FutureSprintGenerationResult> {
+    if (!this.ensureWorkspaceAvailable(true)) throw new MissingSprintWorkspaceError();
+    return this.manager.generateFutureSprint(this.currentSettings.profiles[0]?.id);
   }
 
   private needsSupportMigration(): boolean {
@@ -306,6 +324,18 @@ export class SprintFeature implements SprintFeatureApi {
     } catch (error) {
       if (error instanceof MissingSprintWorkspaceError) return;
       new Notice(error instanceof Error ? `Sprint Base generation failed: ${error.message}` : 'Sprint Base generation failed.');
+    }
+  }
+
+  private async generateFutureSprintWithNotice(): Promise<void> {
+    try {
+      const result = await this.generateFutureSprint();
+      new Notice(`Future sprint created: ${result.note.basename} (${result.startDate}).`);
+    } catch (error) {
+      if (error instanceof MissingSprintWorkspaceError) return;
+      new Notice(error instanceof Error
+        ? `Future sprint generation failed: ${error.message}`
+        : 'Future sprint generation failed.');
     }
   }
 

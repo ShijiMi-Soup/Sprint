@@ -8,15 +8,22 @@ import {
   createSprintBasesViewRegistration,
   createSprintVelocityViewRegistration,
   formatTaskCardProperty,
+  formatTaskCompletion,
+  filterPlannerSprints,
   getCardTaskProperties,
   getEstimateTone,
   getEditableTaskProperties,
   getNewTaskSprintScope,
   getSprintBasesOptions,
   getTaskProjectGroup,
+  getTaskGroupValue,
+  applyTaskGroupAssignment,
+  isSafeTaskGroupProperty,
   openProjectNote,
   parseTaskPropertyValue,
   resolveTaskPropertyType,
+  resolveTaskGroupLabel,
+  resolveTaskGroupProperty,
   selectRecentVelocityPoints,
   sortProjectGroups,
   taskReferencesProject,
@@ -31,7 +38,9 @@ describe('SprintBasesView', () => {
       expect.objectContaining({ key: 'sprintProfile', type: 'dropdown' }),
       expect.objectContaining({ key: 'layout', type: 'dropdown' }),
       expect.objectContaining({ key: 'showCompleted', type: 'toggle' }),
+      expect.objectContaining({ key: 'groupByProperty', type: 'property' }),
       expect.objectContaining({ key: 'groupOrder', type: 'dropdown' }),
+      expect.objectContaining({ key: 'groupOrderProperty', type: 'property' }),
       expect.objectContaining({ key: 'groupOrderDirection', type: 'dropdown' }),
     ]));
     expect(getSprintBasesOptions(settings)).toEqual(expect.arrayContaining([
@@ -40,6 +49,83 @@ describe('SprintBasesView', () => {
         options: expect.objectContaining({ kanban: 'Kanban', planner: 'Sprint planner' }),
       }),
     ]));
+    const plannerGroupOption = getSprintBasesOptions(settings, 'planner').find((option) => (
+      'key' in option && option.key === 'groupByProperty'
+    ));
+    const plannerGroupFilter = (plannerGroupOption as {
+      filter?: (property: 'note.sprint') => boolean;
+    } | undefined)?.filter;
+    expect(plannerGroupFilter?.('note.sprint')).toBe(false);
+    const currentGroupOption = getSprintBasesOptions(settings, 'kanban', 'current').find((option) => (
+      'key' in option && option.key === 'groupByProperty'
+    ));
+    const currentGroupFilter = (currentGroupOption as {
+      filter?: (property: 'note.sprint') => boolean;
+    } | undefined)?.filter;
+    expect(currentGroupFilter?.('note.sprint')).toBe(false);
+    expect(resolveTaskGroupProperty('note.sprint', 'planner', null)).toBe('note.project');
+    expect(resolveTaskGroupProperty('note.sprint', 'kanban', 'next')).toBe('note.project');
+    expect(resolveTaskGroupProperty('note.sprint', 'kanban', null)).toBe('note.sprint');
+    expect(getSprintBasesOptions(settings, 'planner')).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'showPastSprints', type: 'toggle', default: false }),
+    ]));
+  });
+
+  it('hides past sprint columns from the planner unless explicitly enabled', () => {
+    const sprints = [
+      { name: 'Sprint 1', status: 'past' },
+      { name: 'Sprint 2', status: 'current' },
+      { name: 'Sprint 3', status: 'future' },
+    ];
+
+    expect(filterPlannerSprints(sprints, false).map(({ name }) => name))
+      .toEqual(['Sprint 2', 'Sprint 3']);
+    expect(filterPlannerSprints(sprints, true)).toEqual(sprints);
+  });
+
+  it('formats project progress as completed tasks over total tasks', () => {
+    expect(formatTaskCompletion(3, 9)).toBe('3/9 completed');
+    expect(formatTaskCompletion(0, 0)).toBe('0/0 completed');
+  });
+
+  it('groups by safe editable note properties and applies cross-group moves', () => {
+    const frontmatter: Record<string, unknown> = {
+      project: ['[[Sprint/Projects/Research]]'],
+      category: ['Coursework', 'Urgent'],
+    };
+
+    expect(getTaskGroupValue(frontmatter, 'note.project')).toEqual({
+      label: 'Research',
+      assignment: ['[[Sprint/Projects/Research]]'],
+    });
+    expect(getTaskGroupValue(frontmatter, 'note.category')).toEqual({
+      label: 'Coursework',
+      assignment: ['Coursework'],
+    });
+    applyTaskGroupAssignment(frontmatter, 'note.category', ['Research']);
+    expect(frontmatter.category).toEqual(['Research', 'Urgent']);
+    applyTaskGroupAssignment(frontmatter, 'note.category', null);
+    expect(frontmatter.category).toBeUndefined();
+    expect(isSafeTaskGroupProperty('note.project')).toBe(true);
+    expect(isSafeTaskGroupProperty('note.archived')).toBe(false);
+    expect(isSafeTaskGroupProperty('formula.task_state')).toBe(false);
+  });
+
+  it('keeps distinct linked groups separate when their display labels match', () => {
+    const assignments = new Map<string, unknown>();
+    const first = {
+      label: 'Research',
+      assignment: ['[[Sprint/Projects/Research|Research]]'],
+    };
+    const second = {
+      label: 'Research',
+      assignment: ['[[Archive/Projects/Research|Research]]'],
+    };
+
+    expect(resolveTaskGroupLabel(assignments, first)).toBe('Research');
+    assignments.set('Research', first.assignment);
+    expect(resolveTaskGroupLabel(assignments, second))
+      .toBe('Research (Archive/Projects/Research)');
   });
 
   it('uses the native Properties order for editable new-task fields', () => {
@@ -159,6 +245,25 @@ describe('SprintBasesView', () => {
       'in progress': true,
       'is done': false,
       estimate: 3,
+    });
+  });
+
+  it('preserves an equivalent project link when moving only between sprint columns', () => {
+    const frontmatter: Record<string, unknown> = {
+      project: ['[[Welcome to Agile PM]]'],
+      sprint: ['[[Sprint/Sprints/Sprint 1]]'],
+    };
+
+    applyPlannerTaskDestination(
+      frontmatter,
+      'Sprint/Sprints/Sprint 2',
+      'Sprint/Projects/Welcome to Agile PM',
+      false,
+    );
+
+    expect(frontmatter).toEqual({
+      project: ['[[Welcome to Agile PM]]'],
+      sprint: ['[[Sprint/Sprints/Sprint 2]]'],
     });
   });
 

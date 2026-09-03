@@ -1,6 +1,6 @@
 {
   "name": "@sprint-agent/sprint",
-  "version": "0.1.3",
+  "version": "0.2.0",
   "description": "Provider-independent sprint management for Obsidian",
   "author": "Shijimi",
   "license": "MIT",

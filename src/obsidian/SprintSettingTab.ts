@@ -484,6 +484,16 @@ export class SprintSettingTab extends PluginSettingTab {
         },
         'Create missing base files, dashboard notes, local AI instructions, and shared vault-root skills.',
       ),
+      this.renderDefinition(
+        'Generate future sprint',
+        ['future', 'sprint', 'planning'],
+        (setting) => {
+          setting.addButton((button) => button
+            .setButtonText('Add sprint')
+            .onClick(() => { void this.generateFutureSprint(); }));
+        },
+        'Create one sprint after the latest generated sprint without changing the automatic horizon.',
+      ),
     ];
   }
 
@@ -589,6 +599,18 @@ export class SprintSettingTab extends PluginSettingTab {
     } catch (error) {
       if (error instanceof MissingSprintWorkspaceError) return;
       new Notice(error instanceof Error ? `Sprint Base generation failed: ${error.message}` : 'Sprint Base generation failed.');
+    }
+  }
+
+  private async generateFutureSprint(): Promise<void> {
+    try {
+      const result = await this.feature.generateFutureSprint();
+      new Notice(`Future sprint created: ${result.note.basename} (${result.startDate}).`);
+    } catch (error) {
+      if (error instanceof MissingSprintWorkspaceError) return;
+      new Notice(error instanceof Error
+        ? `Future sprint generation failed: ${error.message}`
+        : 'Future sprint generation failed.');
     }
   }
 

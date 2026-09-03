@@ -72,8 +72,8 @@ preserved.
 
 | View | Purpose |
 | --- | --- |
-| Sprint board | All non-archived tasks grouped first by project and then by Not started, In progress, and Done. |
-| Sprint planner | Default Tasks view. Non-archived tasks shown in project swimlanes with Backlog and generated sprint columns for reassignment. |
+| Sprint board | All non-archived tasks grouped by a selected note property and then by Not started, In progress, and Done. |
+| Sprint planner | Default Tasks view. Non-archived tasks shown in configurable swimlanes with Backlog and generated sprint columns for reassignment. |
 | Tasks | Editable table of all task notes, including archived tasks. |
 | Current sprint | Non-archived tasks assigned to the current sprint, grouped by active projects. |
 | Next sprint | Non-archived tasks assigned to the next sprint, grouped by active projects. |
@@ -81,27 +81,41 @@ preserved.
 The full Sprint board can show projects in any project state. Current and Next
 sprint views show projects that are in progress. Each project section can be
 collapsed or moved to the board's **Hidden** section. Dragging a task card between
-state columns updates the task properties.
+state columns updates the task properties. Each swimlane heading reports progress as
+`completed tasks / total tasks completed`, excluding archived and filtered-out tasks.
 
 The **Sprint planner** is the default Tasks Base view. Each project is a horizontal
-swimlane containing Backlog and generated sprint columns ordered by start date. The
+swimlane containing Backlog plus the last, current, and generated future sprint columns,
+ordered by start date. Older `past` sprint columns and their assigned tasks are hidden by
+default so active planning stays visible. Enable **Show past sprints** in the view settings
+to restore them. The
 planner shows task and estimate totals for its groups. Drag a task horizontally to
 change its `sprint` assignment, or vertically into another project swimlane to change
 its `project` assignment. A diagonal move can update both properties in one action;
-task state remains unchanged. Each card also provides Sprint and Project selectors for
-keyboard and mobile reassignment.
+task state remains unchanged. Each card provides a Sprint selector for keyboard and
+mobile reassignment. The project is represented by its swimlane rather than a redundant
+Project selector on every card.
 Completed tasks are visible by default, while archived tasks remain excluded.
 Use the view's **Show completed tasks** option to hide completed work.
 
-Use **Order project groups by** in the view settings to sort project swimlanes by
-name or numeric project Priority. **Project group direction** controls ascending or
-descending order; projects without a Priority and **No project** remain at the end.
+Use **Group by** in the view settings to select a safe editable note property for
+swimlanes. Project remains the default. Dragging between swimlanes updates the selected
+property; for multi-value properties Sprint groups by the first value and replaces that
+grouped value on a move while preserving later values. Formula, file, state, and archive
+properties are not offered. Sprint grouping is unavailable in Sprint planner, Current
+sprint, and Next sprint views because their sprint destinations are controlled by the
+view itself.
+
+Use **Order groups by** to sort by group name or a numeric property on linked group
+notes. **Group order property** defaults to Priority, and **Group direction** controls
+ascending or descending order. Groups without a numeric value and empty groups remain
+at the end.
 
 #### Sprints Base
 
 | View | Purpose |
 | --- | --- |
-| Sprint overview | Cards for the last, current, and next sprint with dates, task/point progress, review, and retrospective status. |
+| Sprint overview | Cards for last, current, next, and generated future sprints with dates, task/point progress, review, and retrospective status. |
 | Active sprints | Table of the last, current, and next sprint. |
 | Velocity | Bar chart of completed estimate points for every generated sprint, including zero-point sprints. |
 | All sprints | Complete sprint history table. |
@@ -121,6 +135,11 @@ Projects table. Run **Sprint: Open summary** from the command palette to open it
 - Generate current and future sprint notes on a configurable 1-8 week cadence. New
   workspaces keep the next two sprints available by default so the second future
   sprint can hold provisional work without committing it to the immediate next sprint.
+- Generate one additional future sprint on demand from **Settings -> Sprint ->
+  Maintenance -> Generate future sprint** or the command palette. This does not change
+  the configured automatic horizon.
+- Use **Add Sprint N** directly in Sprint planner or Sprint overview for the same
+  sequential generation behavior.
 - Catch up after Obsidian has been closed for one or more sprint cycles.
 - Mark generated sprint notes as `last`, `current`, `next`, `past`, or `future`.
 - Move unfinished work according to the selected rollover policy.
@@ -282,3 +301,4 @@ run **Sprint: Generate bases** and then **Sprint: Sync**.
 | Sprint: Open planner | Opens the configured Tasks Base's Sprint Planner view directly. |
 | Sprint: Sync | Creates missing sprint notes, updates lifecycle statuses, and applies rollover. |
 | Sprint: Generate bases | Creates missing support files and applies managed Base schema migrations. |
+| Sprint: Generate future | Creates one sprint after the latest generated sprint using the configured cadence and next sequential number. |

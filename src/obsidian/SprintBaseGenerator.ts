@@ -150,6 +150,11 @@ function sprintInstructions(settings: SprintSettings, profiles = settings.profil
     '- Store `project` and `sprint` as lists of Obsidian links, matching the conventions in existing generated task notes.',
     '- For broad or destructive changes, summarize the proposed file changes and ask for confirmation first.',
     '- Assign tasks to existing generated sprint notes by updating the `sprint` property.',
+    '- Treat tasks without a Sprint assignment as backlog items. Use the Sprint planner to move tasks between backlog and generated sprint notes while preserving task state.',
+    '- Sprint board views can group tasks by a safe editable note property. Moving a card between groups updates that property; moving it between state columns updates the state booleans.',
+    '- Respect each Base view\'s visible property order when creating or summarizing tasks. Current and Next sprint views assign their sprint automatically; the full Sprint board does not.',
+    '- When the user needs another planning horizon, use Sprint\'s Generate future sprint action. Do not manually invent dates or reuse sprint numbers.',
+    '- If the configured workspace is missing, stop and ask the user to locate it, create a replacement, or defer recovery. Do not silently recreate a moved folder.',
     '- Mark tasks complete only when the user says the work is complete or available evidence clearly establishes completion.',
     '- Never claim a task, sprint, project, Base, or setting was changed unless the corresponding vault write succeeded.',
     '',
@@ -198,6 +203,7 @@ function sprintOverviewView(profileId: string): string[] {
     '        - note["sprint status"] == "current"',
     '        - note["sprint status"] == "next"',
     '        - note["sprint status"] == "last"',
+    '        - note["sprint status"] == "future"',
     '    groupBy:',
     '      property: sprint status',
     '      direction: ASC',
@@ -237,6 +243,11 @@ function sprintView(
     ...(sprintScope ? [`    sprintScope: ${yamlString(sprintScope)}`] : []),
     `    layout: ${yamlString(layout)}`,
     `    showCompleted: ${showCompleted}`,
+    ...(layout === 'planner' ? ['    showPastSprints: false'] : []),
+    '    groupByProperty: note.project',
+    '    groupOrder: alphabetical',
+    '    groupOrderProperty: note.priority',
+    '    groupOrderDirection: asc',
   ];
 }
 
@@ -385,6 +396,7 @@ export function migrateTasksBaseContent(content: string, profileId: string): str
         sprintProfile: profileId,
         layout: 'planner',
         showCompleted: true,
+        showPastSprints: false,
       });
       changed = true;
     }
@@ -398,6 +410,26 @@ export function migrateTasksBaseContent(content: string, profileId: string): str
       }
       if (view.type !== SPRINT_BASES_VIEW_TYPE || view.sprintProfile !== profileId) continue;
       changed = appendFilter(view, 'note.archived != true') || changed;
+      if (view.layout === 'planner' && view.showPastSprints === undefined) {
+        view.showPastSprints = false;
+        changed = true;
+      }
+      if (view.groupByProperty === undefined) {
+        view.groupByProperty = 'note.project';
+        changed = true;
+      }
+      if (view.groupOrder === undefined) {
+        view.groupOrder = 'alphabetical';
+        changed = true;
+      }
+      if (view.groupOrderProperty === undefined) {
+        view.groupOrderProperty = 'note.priority';
+        changed = true;
+      }
+      if (view.groupOrderDirection === undefined) {
+        view.groupOrderDirection = 'asc';
+        changed = true;
+      }
       if (!Array.isArray(view.order)) {
         const legacyCardProperties = [1, 2, 3]
           .map((position) => view[`cardProperty${position}`])
@@ -470,6 +502,21 @@ export function migrateProjectsBaseContent(content: string): string {
       }
     }
     return changed;
+  });
+}
+
+export function migrateSprintsBaseContent(content: string): string {
+  return migrateBaseContent(content, (base) => {
+    if (!Array.isArray(base.views)) return false;
+    const overview = base.views
+      .map(asRecord)
+      .find((view) => view?.type === SPRINT_BASES_VIEW_TYPE && view.name === 'Sprint overview');
+    const filters = overview ? asRecord(overview.filters) : null;
+    if (!filters || !Array.isArray(filters.or)) return false;
+    const futureFilter = 'note["sprint status"] == "future"';
+    if (filters.or.includes(futureFilter)) return false;
+    filters.or.push(futureFilter);
+    return true;
   });
 }
 
@@ -633,6 +680,9 @@ export class SprintBaseGenerator {
       await this.withContext(`Migrate Projects Base for ${profile.name || profile.id}`, () => (
         this.migrateProjectsBase(settings, profile)
       ));
+      await this.withContext(`Migrate Sprints Base for ${profile.name || profile.id}`, () => (
+        this.migrateSprintsBase(settings, profile)
+      ));
       for (const definition of definitions) {
         await this.withContext(`Create Base ${definition.path}`, async () => {
           await this.ensureFolder(definition.folder);
@@ -701,6 +751,14 @@ export class SprintBaseGenerator {
       ));
     }
     await this.migrateExistingBase(path, migrateProjectsBaseContent);
+  }
+
+  private async migrateSprintsBase(settings: SprintSettings, profile: SprintProfile): Promise<void> {
+    const resolved = resolveSprintProfile(settings, profile);
+    await this.migrateExistingBase(
+      basePath(resolved.sprintsBasePath),
+      migrateSprintsBaseContent,
+    );
   }
 
   private async migrateExistingBase(

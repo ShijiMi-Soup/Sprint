@@ -3,12 +3,30 @@ import {
   getSprintSummaryWriteAction,
   migrateBaseFolderContent,
   migrateProjectsBaseContent,
+  migrateSprintsBaseContent,
   migrateTasksBaseContent,
   SprintBaseGenerator,
 } from '@/obsidian/SprintBaseGenerator';
 import { parse } from 'yaml';
 
 describe('SprintBaseGenerator', () => {
+  it('adds future sprints to an existing Sprint overview', () => {
+    const content = [
+      'views:',
+      '  - type: sprint-agent-sprint-board',
+      '    name: Sprint overview',
+      '    filters:',
+      '      or:',
+      '        - note["sprint status"] == "current"',
+      '        - note["sprint status"] == "next"',
+      '',
+    ].join('\n');
+    const migrated = migrateSprintsBaseContent(content);
+
+    expect(migrated).toContain('note["sprint status"] == "future"');
+    expect(migrateSprintsBaseContent(migrated)).toBe(migrated);
+  });
+
   it('creates missing summaries and preserves edited summaries', () => {
     expect(getSprintSummaryWriteAction(null, 'generated')).toBe('create');
     expect(getSprintSummaryWriteAction('generated', 'generated')).toBe('unchanged');
@@ -329,6 +347,8 @@ describe('SprintBaseGenerator', () => {
     expect(tasksBase).toContain('sprintScope: "current"');
     expect(tasksBase).toContain('name: "Next sprint"');
     expect(tasksBase).toContain('sprintScope: "next"');
+    expect(tasksBase).toContain('groupByProperty: note.project');
+    expect(tasksBase).toContain('groupOrderProperty: note.priority');
     const taskViews = (parse(tasksBase) as {
       views: Array<{ name: string; order?: string[] }>;
     }).views;
@@ -336,6 +356,7 @@ describe('SprintBaseGenerator', () => {
       .toEqual(['file.name', 'note.estimate', 'note.due', 'note.sprint']);
     expect(taskViews.find(({ name }) => name === 'Sprint planner')).toEqual(expect.objectContaining({
       order: ['file.name', 'note.project', 'note.estimate', 'note.due'],
+      showPastSprints: false,
     }));
     expect(taskViews[0]?.name).toBe('Sprint planner');
     expect(taskViews.find(({ name }) => name === 'Current sprint')?.order)
@@ -350,6 +371,8 @@ describe('SprintBaseGenerator', () => {
     );
     expect(written.get('Agile PM/AGENTS.md')).toContain('boolean `archived`');
     expect(written.get('Agile PM/AGENTS.md')).toContain('date `due`');
+    expect(written.get('Agile PM/AGENTS.md')).toContain('Generate future sprint');
+    expect(written.get('.agents/skills/sprint/SKILL.md')).toContain('Sprint planner');
     expect(written.get('Agile PM/Tasks/Add your first real task.md')).toContain('due:');
   });
 

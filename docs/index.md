@@ -19,7 +19,8 @@ the generated workspace structure.
 ## Highlights
 
 - Automatic current and future sprint generation on a 1-8 week cadence.
-- Project-grouped Kanban boards for all, current, and next-sprint tasks.
+- Configurable Kanban swimlanes for all, current, next-sprint, and planning views.
+- On-demand generation of an additional future sprint using the configured cadence.
 - Drag-and-drop state changes and inline task creation.
 - Built-in velocity charts and sprint overviews without chart extensions.
 - Safe reconnect and additive migration of existing Sprint workspaces.
