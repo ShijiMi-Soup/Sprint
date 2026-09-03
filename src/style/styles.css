@@ -58,8 +58,21 @@
   font-size: var(--font-ui-small);
 }
 
+.sprint-bases-project-link {
+  color: var(--text-muted);
+}
+
+.sprint-bases-project-link:hover {
+  color: var(--text-accent);
+}
+
 .sprint-bases-project-visibility {
   grid-column: 5;
+}
+
+.sprint-bases-planner > .sprint-bases-project {
+  min-width: 100%;
+  width: max-content;
 }
 
 .sprint-bases-hidden-projects {
@@ -112,6 +125,174 @@
 .sprint-bases-kanban .sprint-bases-group.is-drop-target {
   background: color-mix(in srgb, var(--interactive-accent) 8%, var(--background-secondary));
   border-color: color-mix(in srgb, var(--interactive-accent) 55%, var(--background-modifier-border));
+}
+
+.sprint-bases-planner {
+  min-width: 0;
+  overflow-x: auto;
+}
+
+.sprint-planner-board {
+  display: grid;
+  gap: var(--size-4-3);
+  grid-auto-columns: minmax(240px, 300px);
+  grid-auto-flow: column;
+  overflow-x: visible;
+  padding-bottom: var(--size-4-2);
+}
+
+.sprint-planner-board.sprint-bases-project-board {
+  grid-template-columns:
+    repeat(var(--sprint-planner-column-count), minmax(240px, 300px))
+    56px;
+  min-width: 100%;
+  width: max-content;
+}
+
+.sprint-planner-column {
+  background: var(--background-secondary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 8px;
+  display: grid;
+  grid-template-rows: auto minmax(120px, 1fr);
+  min-height: 320px;
+  padding: var(--size-4-2);
+  transition: background-color 120ms ease, border-color 120ms ease;
+}
+
+.sprint-planner-column.is-drop-target {
+  background: color-mix(in srgb, var(--interactive-accent) 8%, var(--background-secondary));
+  border-color: color-mix(in srgb, var(--interactive-accent) 55%, var(--background-modifier-border));
+}
+
+.sprint-planner-column-header {
+  display: grid;
+  gap: var(--size-2-3);
+  padding: var(--size-4-1) var(--size-4-1) var(--size-4-2);
+}
+
+.sprint-planner-column-heading {
+  align-items: baseline;
+  display: flex;
+  gap: var(--size-4-2);
+  min-width: 0;
+}
+
+.sprint-planner-column-heading h4 {
+  font-size: var(--font-ui-medium);
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sprint-planner-status,
+.sprint-planner-column-metrics {
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+}
+
+.sprint-planner-status {
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 4px;
+  padding: 0 var(--size-2-3);
+}
+
+.sprint-planner-entries {
+  align-content: start;
+  display: grid;
+  gap: var(--size-4-4);
+  min-height: 120px;
+}
+
+.sprint-planner-board.sprint-bases-project-board .sprint-planner-column {
+  min-height: 220px;
+}
+
+.sprint-planner-card {
+  background: var(--background-primary-alt);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 6px;
+  cursor: grab;
+  display: grid;
+  gap: var(--size-4-2);
+  min-width: 0;
+  padding: var(--size-4-2);
+}
+
+.sprint-planner-card:active {
+  cursor: grabbing;
+}
+
+.sprint-planner-card.is-dragging {
+  opacity: 0.45;
+}
+
+.sprint-planner-card.is-updating {
+  opacity: 0.7;
+  pointer-events: none;
+}
+
+.sprint-planner-card button.sprint-planner-card-title {
+  background: transparent;
+  border: 0;
+  color: var(--text-normal);
+  font-size: var(--font-ui-small);
+  height: auto;
+  justify-content: flex-start;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  padding: 0;
+  text-align: left;
+  white-space: normal;
+}
+
+.sprint-planner-card button.sprint-planner-card-title:hover {
+  color: var(--text-accent);
+}
+
+.sprint-planner-card-meta {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  font-size: var(--font-ui-smaller);
+  gap: var(--size-4-2);
+}
+
+.sprint-planner-state {
+  background: color-mix(in srgb, var(--text-muted) 9%, transparent);
+  border: 1px solid color-mix(in srgb, var(--text-muted) 20%, transparent);
+  border-radius: 4px;
+  color: var(--text-muted);
+  padding: 1px var(--size-4-2);
+}
+
+.sprint-planner-state-in-progress {
+  color: var(--text-accent);
+}
+
+.sprint-planner-state-done {
+  color: var(--color-green);
+}
+
+.sprint-planner-sprint-select {
+  min-width: 0;
+  width: 100%;
+}
+
+.sprint-planner-add-column {
+  display: flex;
+  height: 100%;
+}
+
+.sprint-add-sprint-button {
+  align-items: center;
+  display: inline-flex;
+  gap: var(--size-4-1);
+}
+
+.sprint-add-sprint-icon {
+  display: inline-flex;
 }
 
 .sprint-bases-entries {
@@ -220,6 +401,13 @@ body .sprint-bases-view button.sprint-bases-entry {
   width: 100%;
 }
 
+.sprint-bases-new-task-fields {
+  display: grid;
+  gap: var(--size-4-2);
+  max-height: 280px;
+  overflow-y: auto;
+}
+
 .sprint-bases-new-task-name {
   font-weight: var(--font-medium);
 }
@@ -229,6 +417,24 @@ body .sprint-bases-view button.sprint-bases-entry {
   display: grid;
   gap: var(--size-4-2);
   grid-template-columns: auto minmax(0, 1fr);
+}
+
+.sprint-bases-new-task-field textarea,
+.sprint-bases-new-task-field select {
+  min-width: 0;
+  width: 100%;
+}
+
+.sprint-bases-new-task-checkbox {
+  align-items: center;
+  display: flex;
+  gap: var(--size-4-2);
+  min-width: 0;
+}
+
+.sprint-bases-new-task-checkbox input[type='checkbox'] {
+  flex: 0 0 auto;
+  width: auto;
 }
 
 .sprint-bases-new-task-field-icon {
@@ -245,10 +451,28 @@ body .sprint-bases-view button.sprint-bases-entry {
   margin: 0 0 var(--size-4-2);
 }
 
+.sprint-bases-content.sprint-overview {
+  align-items: stretch;
+  display: flex;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  padding-bottom: var(--size-4-2);
+}
+
+.sprint-overview > .sprint-overview-group {
+  display: flex;
+  flex-direction: column;
+}
+
+.sprint-overview > .sprint-overview-group:not(.sprint-overview-add-group) {
+  flex: var(--sprint-overview-card-count) 0 var(--sprint-overview-group-width);
+}
+
 .sprint-overview-cards {
   display: grid;
+  flex: 1;
   gap: var(--size-4-3);
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  grid-template-columns: repeat(var(--sprint-overview-card-count), minmax(220px, 1fr));
 }
 
 .sprint-overview-card {
@@ -257,7 +481,39 @@ body .sprint-bases-view button.sprint-bases-entry {
   border-radius: 8px;
   display: grid;
   gap: var(--size-4-2);
+  height: 100%;
   padding: var(--size-4-3);
+}
+
+.sprint-overview-add-card {
+  display: flex;
+  flex: 1;
+  height: 100%;
+}
+
+.sprint-overview-add-group {
+  flex: 0 0 56px;
+}
+
+body .sprint-bases-view button.sprint-overview-add-button,
+body .sprint-bases-view button.sprint-planner-add-button {
+  align-items: center;
+  background: var(--background-secondary);
+  border: 1px solid transparent;
+  border-radius: 8px;
+  color: var(--text-muted);
+  height: 100%;
+  justify-content: center;
+  min-height: 0;
+  padding: 0;
+  width: 100%;
+}
+
+body .sprint-bases-view button.sprint-overview-add-button:hover,
+body .sprint-bases-view button.sprint-planner-add-button:hover {
+  background: var(--background-modifier-hover);
+  border-color: var(--background-modifier-border);
+  color: var(--text-normal);
 }
 
 .sprint-overview-card button.sprint-overview-title {
@@ -322,12 +578,27 @@ body .sprint-bases-view button.sprint-bases-entry {
 }
 
 .sprint-bases-view .sprint-bases-entry-property {
+  align-items: center;
   background: color-mix(in srgb, var(--text-muted) 9%, transparent);
   border: 1px solid color-mix(in srgb, var(--text-muted) 20%, transparent);
   border-radius: 4px;
   color: var(--text-muted);
+  display: inline-flex;
+  gap: var(--size-2-2);
   line-height: 1.4;
   padding: 1px var(--size-4-2);
+}
+
+.sprint-bases-entry-property-icon,
+.sprint-bases-entry-property-icon svg {
+  height: 12px;
+  width: 12px;
+}
+
+.sprint-overview-add-button .sprint-add-sprint-icon svg,
+.sprint-planner-add-button .sprint-add-sprint-icon svg {
+  height: 24px;
+  width: 24px;
 }
 
 .sprint-bases-view .sprint-bases-entry-points-low {

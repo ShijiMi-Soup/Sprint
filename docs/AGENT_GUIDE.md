@@ -69,6 +69,7 @@ When the user asks you to manage tasks, you may:
 - Set or update estimates when the user supplies an estimate or asks you to propose one.
 - Link tasks to projects and existing sprint notes.
 - Move tasks between backlog and existing sprints by updating the `sprint` property.
+- Use Sprint's **Generate future sprint** action when another planning horizon is needed. Do not manually invent sprint dates or reuse sprint numbers.
 - Move tasks between Not started, In progress, and Done using the `in progress` and `is done` checkboxes.
 - Mark tasks complete only when the user says the work is complete or the available evidence clearly establishes completion.
 - Archive tasks only when the user wants them removed from sprint boards while retaining their notes in the Tasks view and vault history.
@@ -81,6 +82,21 @@ Before making changes:
 2. Read the relevant Base configuration and a small sample of existing task, project, and sprint notes.
 3. Identify the current sprint from `sprint status: current`; never infer it from a filename alone.
 4. Preserve unrelated frontmatter, note content, comments, and formatting.
+
+The Sprint board and planner share task swimlanes. A view may group tasks by a safe
+editable note property and order linked-note groups by a selected numeric property.
+Moving a card between groups updates that property; formula, file, archive, and derived
+state properties remain read-only grouping targets. For multi-value properties, Sprint
+uses the first value as the task's group and a cross-group move replaces that grouped
+value while preserving later values.
+
+The native Bases Properties order controls card metadata and inline task fields.
+Current and Next sprint views assign their corresponding sprint to new tasks, while the
+full Sprint board leaves sprint assignment explicit.
+
+If the configured Sprint folder is missing, use Sprint's workspace recovery flow to
+locate the moved workspace or create a replacement. Do not recreate the old path
+implicitly.
 
 For destructive or broad changes, summarize the proposed file changes and obtain confirmation first. Examples include deleting tasks, moving many tasks, rewriting estimates across a backlog, or changing Base schemas.
 

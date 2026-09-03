@@ -48,6 +48,13 @@ export interface SprintSyncResult {
   profilesSynced: number;
 }
 
+export interface FutureSprintGenerationResult {
+  created: boolean;
+  note: SprintVaultNote;
+  sprintNumber: number;
+  startDate: string;
+}
+
 interface SprintRecord {
   note: SprintVaultNote;
   number: number;
@@ -106,6 +113,7 @@ export class SprintManager {
     updatedSprints: 0,
     profilesSynced: 0,
   });
+  private generationTail: Promise<void> = Promise.resolve();
 
   constructor(
     private readonly vault: SprintVault,
@@ -117,6 +125,70 @@ export class SprintManager {
     const run = (): Promise<SprintSyncResult> => this.syncNow();
     this.syncTail = this.syncTail.then(run, run);
     return this.syncTail;
+  }
+
+  generateFutureSprint(profileId?: string): Promise<FutureSprintGenerationResult> {
+    const run = (): Promise<FutureSprintGenerationResult> => this.generateFutureSprintNow(profileId);
+    const result = this.generationTail.then(run, run);
+    this.generationTail = result.then(() => undefined, () => undefined);
+    return result;
+  }
+
+  private async generateFutureSprintNow(profileId?: string): Promise<FutureSprintGenerationResult> {
+    const settings = this.getSettings();
+    if (!settings.enabled) {
+      throw new Error('Enable automatic sprint management before generating a future sprint.');
+    }
+    const profile = settings.profiles.find((candidate) => (
+      candidate.enabled && (!profileId || candidate.id === profileId)
+    ));
+    if (!profile) throw new Error('No enabled Sprint workspace was found.');
+
+    // Synchronize first so cadence dates and lifecycle statuses are current.
+    await this.sync();
+    const resolved = resolveSprintProfile(this.getSettings(), profile);
+    const root = normalizeFolder(resolved.rootFolder);
+    if (!root) throw new Error('Set the Sprint workspace folder before generating a sprint.');
+    if (!resolved.namingFormat.includes('{number}')) {
+      throw new Error('Sprint naming must include {number} before generating another sprint.');
+    }
+
+    const sprintsFolder = `${root}/Sprints`;
+    const durationWeeks = Math.min(8, Math.max(1, Math.round(resolved.durationWeeks)));
+    const records = this.readSprintRecords(sprintsFolder);
+    const datedRecords = records.filter(
+      (record): record is SprintRecord & { startDate: string } => record.startDate !== null,
+    );
+    const latest = [...datedRecords].sort((left, right) => (
+      left.startDate.localeCompare(right.startDate) || left.number - right.number
+    )).at(-1);
+    if (!latest) throw new Error('Synchronize the Sprint workspace before generating a future sprint.');
+
+    const sprintNumber = Math.max(0, ...records.map((record) => record.number)) + 1;
+    const sprintName = resolved.namingFormat.replaceAll('{number}', String(sprintNumber)).trim();
+    if (!sprintName || sprintName.includes('/')) {
+      throw new Error(`Invalid sprint naming format: ${resolved.namingFormat}`);
+    }
+    const path = `${sprintsFolder}/${sprintName}.md`;
+    const existing = records.find((record) => record.note.path === path);
+    if (existing) {
+      throw new Error(`The next sprint name already exists: ${sprintName}`);
+    }
+
+    const startDate = addDays(latest.startDate, durationWeeks * 7);
+    const note = await this.vault.createNote(
+      path,
+      {
+        'sprint number': sprintNumber,
+        'start date': startDate,
+        'end date': getSprintEnd(startDate, durationWeeks),
+        'sprint status': 'future',
+        review: '',
+        retrospective: '',
+      },
+      SPRINT_BODY,
+    );
+    return { created: true, note, sprintNumber, startDate };
   }
 
   private async syncNow(): Promise<SprintSyncResult> {

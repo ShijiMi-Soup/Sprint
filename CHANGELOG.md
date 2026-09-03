@@ -1,5 +1,75 @@
 # Changelog
 
+## Unreleased
+
+## 0.2.0 - 2026-09-03
+
+### Changed
+
+- Hide past sprint columns and their assigned tasks from Sprint Planner by default;
+  add a **Show past sprints** view option for historical replanning.
+- Keep Sprint Planner moves within their existing project swimlane when short and
+  vault-relative project links resolve to the same project file.
+- Place the Sprint overview's add-sprint action after the sprint cards and style it as a
+  subdued, narrow plus button matching the sprint cards' height.
+- Place the same narrow add-sprint control after the furthest sprint column in each
+  Sprint Planner project row.
+- Order Sprint overview groups as current, next, then future; render all future sprint
+  cards in the same horizontal row before the add-sprint button.
+- Added shared configurable task swimlanes across Kanban and Sprint Planner views.
+  Views can group by safe editable note properties and order linked-note groups by a
+  selected numeric property. Cross-group drops update the selected grouping property.
+- Replaced project task counts with `completed/total completed` progress labels.
+- Added **Add Sprint N** controls to Sprint planner and Sprint overview, and included
+  generated future sprints in both views.
+- Removed the redundant per-card Project selector from Sprint planner; project
+  assignment remains represented by swimlanes and cross-project drag-and-drop.
+- Updated generated Sprint skills for planner assignment, configurable grouping,
+  scoped task creation, workspace recovery, and future-sprint generation.
+- Changed Sprint Planner grouping to project swimlanes with Backlog and chronological
+  sprint columns. Tasks can be dragged across both projects and sprints; a drop updates
+  the destination project and/or sprint while preserving task state.
+- Added per-view project group ordering by name or Priority, with ascending and
+  descending directions, to Kanban and Sprint Planner views.
+- Made Sprint Planner the default Tasks Base view.
+- New workspaces now generate two future sprints by default, providing a provisional
+  next-next sprint while keeping the horizon configurable.
+- Display Kanban Due values as date-only `YYYY/MM/DD` labels without a time component.
+- Build the inline New task form from each Kanban view's visible editable note
+  properties and preserve their Properties-selector order.
+- Leave tasks created from the full Sprint board unassigned by default, while
+  Current and Next sprint views assign their corresponding sprint automatically.
+
+### Added
+
+- Added a **Generate future** command and **Generate future sprint** settings action that creates one sprint
+  after the latest generated sprint using the configured cadence and next number.
+- Added an **Open planner** command that targets the configured Tasks Base's
+  Sprint Planner view without depending on its default view.
+- Added a Sprint Planner view with Backlog and chronological sprint columns,
+  task/point totals, drag-and-drop assignment, and an accessible per-card Sprint
+  selector. Reassignment changes only the task's `sprint` property.
+- Added an Open project link beside each project name in Kanban views.
+- Added sprint-relative due dates to all generated tutorial tasks.
+- Show Due on default Kanban cards and use a calendar icon instead of a text label.
+- Added safe recovery for missing or manually moved Sprint workspaces, including
+  live rename tracking, locate and confirmed replacement actions, and paused
+  automatic synchronization while the configured folder is missing.
+- Added an English/Japanese VitePress documentation site with local search and a
+  GitHub Pages deployment workflow.
+
+### Documentation
+
+- Documented the future shared Kanban component, safe Group by and Order by settings,
+  editable property boundaries, and project ordering by priority or name.
+- Added a reference for Sprint terminology, generated files, views, data properties,
+  Kanban configuration, workspace renaming, reset behavior, and commands.
+- Added a documentation maintenance policy and pull request checklist for keeping
+  user-facing docs synchronized with code changes.
+- Documented a proposed VitePress and GitHub Pages publication workflow.
+- Added reusable project-scoped Codex agents for implementation, data safety, read-only
+  QA review, and documentation/release preparation, plus delegation guidance.
+
 ## 0.1.3 - 2026-08-31
 
 ### Added

@@ -15,6 +15,7 @@ import type {
 } from '../domain/types';
 import type { SprintFeatureApi } from '../SprintFeature';
 import { sprintSkillContent } from './SprintBaseGenerator';
+import { MissingSprintWorkspaceError } from './SprintWorkspaceRecoveryModal';
 
 const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
@@ -483,6 +484,16 @@ export class SprintSettingTab extends PluginSettingTab {
         },
         'Create missing base files, dashboard notes, local AI instructions, and shared vault-root skills.',
       ),
+      this.renderDefinition(
+        'Generate future sprint',
+        ['future', 'sprint', 'planning'],
+        (setting) => {
+          setting.addButton((button) => button
+            .setButtonText('Add sprint')
+            .onClick(() => { void this.generateFutureSprint(); }));
+        },
+        'Create one sprint after the latest generated sprint without changing the automatic horizon.',
+      ),
     ];
   }
 
@@ -544,6 +555,7 @@ export class SprintSettingTab extends PluginSettingTab {
       const result = await this.feature.sync();
       new Notice(`Sprints synchronized: ${result.created} created, ${result.movedTasks} tasks moved.`);
     } catch (error) {
+      if (error instanceof MissingSprintWorkspaceError) return;
       new Notice(error instanceof Error ? `Sprint sync failed: ${error.message}` : 'Sprint sync failed.');
     }
   }
@@ -564,6 +576,7 @@ export class SprintSettingTab extends PluginSettingTab {
       new Notice(`Sprint workspace reset: ${result.created} sprints created.`);
       this.refreshSettings();
     } catch (error) {
+      if (error instanceof MissingSprintWorkspaceError) return;
       new Notice(error instanceof Error ? `Sprint workspace reset failed: ${error.message}` : 'Sprint workspace reset failed.');
     }
   }
@@ -584,7 +597,20 @@ export class SprintSettingTab extends PluginSettingTab {
       const result = await this.feature.generateBases();
       new Notice(`Sprint Bases generated: ${result.created} created, ${result.skipped} already existed.`);
     } catch (error) {
+      if (error instanceof MissingSprintWorkspaceError) return;
       new Notice(error instanceof Error ? `Sprint Base generation failed: ${error.message}` : 'Sprint Base generation failed.');
+    }
+  }
+
+  private async generateFutureSprint(): Promise<void> {
+    try {
+      const result = await this.feature.generateFutureSprint();
+      new Notice(`Future sprint created: ${result.note.basename} (${result.startDate}).`);
+    } catch (error) {
+      if (error instanceof MissingSprintWorkspaceError) return;
+      new Notice(error instanceof Error
+        ? `Future sprint generation failed: ${error.message}`
+        : 'Future sprint generation failed.');
     }
   }
 

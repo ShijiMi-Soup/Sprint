@@ -3,12 +3,30 @@ import {
   getSprintSummaryWriteAction,
   migrateBaseFolderContent,
   migrateProjectsBaseContent,
+  migrateSprintsBaseContent,
   migrateTasksBaseContent,
   SprintBaseGenerator,
 } from '@/obsidian/SprintBaseGenerator';
 import { parse } from 'yaml';
 
 describe('SprintBaseGenerator', () => {
+  it('adds future sprints to an existing Sprint overview', () => {
+    const content = [
+      'views:',
+      '  - type: sprint-agent-sprint-board',
+      '    name: Sprint overview',
+      '    filters:',
+      '      or:',
+      '        - note["sprint status"] == "current"',
+      '        - note["sprint status"] == "next"',
+      '',
+    ].join('\n');
+    const migrated = migrateSprintsBaseContent(content);
+
+    expect(migrated).toContain('note["sprint status"] == "future"');
+    expect(migrateSprintsBaseContent(migrated)).toBe(migrated);
+  });
+
   it('creates missing summaries and preserves edited summaries', () => {
     expect(getSprintSummaryWriteAction(null, 'generated')).toBe('create');
     expect(getSprintSummaryWriteAction('generated', 'generated')).toBe('unchanged');
@@ -197,7 +215,7 @@ describe('SprintBaseGenerator', () => {
       },
     };
 
-    const result = await new SprintBaseGenerator(app as never).generate(
+    const result = await new SprintBaseGenerator(app as never, () => '2026-09-02').generate(
       normalizeSprintSettings({ enabled: true, rootFolder: 'Agile PM' }),
     );
 
@@ -242,6 +260,14 @@ describe('SprintBaseGenerator', () => {
     expect(written.get('Agile PM/Sprint Summary.md')).not.toContain('sprint-managed-start');
     expect(written.get('Agile PM/Tasks/Plan work into the current sprint.md')).toContain('in progress: true');
     expect(written.get('Agile PM/Tasks/Plan work into the current sprint.md')).toContain('archived: false');
+    expect(written.get('Agile PM/Tasks/Review the Agile PM dashboard.md')).toContain('due: 2026-08-31');
+    expect(written.get('Agile PM/Tasks/Add your first real task.md')).toContain('due: 2026-09-01');
+    expect(written.get('Agile PM/Tasks/Write a sprint review.md')).toContain('due: 2026-09-06');
+    expect(written.get("Agile PM/Tasks/Plan next week's sprint.md")).toContain('due: 2026-09-08');
+    for (const [path, content] of written) {
+      if (!path.startsWith('Agile PM/Tasks/')) continue;
+      expect(content).toMatch(/^due: \d{4}-\d{2}-\d{2}$/m);
+    }
     expect(written.get('Agile PM/Tasks/Plan work into the current sprint.md')).toContain('  - "[[Sprint 1]]"');
     expect(written.get("Agile PM/Tasks/Plan next week's sprint.md")).toContain('  - "[[Sprint 2]]"');
     expect(written.get('Agile PM/Tasks/Continue the Agile PM workflow.md')).toContain('  - "[[Sprint 2]]"');
@@ -310,9 +336,9 @@ describe('SprintBaseGenerator', () => {
     expect(written.get('.agents/skills/sprint/SKILL.md')).toContain('Use Fibonacci estimates only.');
     expect(written.get('.claude/skills/sprint/SKILL.md')).toContain('Use Fibonacci estimates only.');
     const tasksBase = written.get('Agile PM/Tasks.base') ?? '';
-    expect(tasksBase.indexOf('name: "Sprint board"')).toBeLessThan(tasksBase.indexOf('name: "Tasks"'));
-    expect(tasksBase).toContain('newTaskProperty1: note.estimate');
-    expect(tasksBase).toContain('newTaskProperty2: note.due');
+    expect(tasksBase.indexOf('name: "Sprint planner"')).toBeLessThan(tasksBase.indexOf('name: "Sprint board"'));
+    expect(tasksBase).not.toContain('newTaskProperty1:');
+    expect(tasksBase).not.toContain('newTaskProperty2:');
     expect(tasksBase).toContain('      - note.estimate');
     expect(tasksBase).toContain('      - note.sprint');
     expect(tasksBase).toContain('note.due:');
@@ -321,6 +347,22 @@ describe('SprintBaseGenerator', () => {
     expect(tasksBase).toContain('sprintScope: "current"');
     expect(tasksBase).toContain('name: "Next sprint"');
     expect(tasksBase).toContain('sprintScope: "next"');
+    expect(tasksBase).toContain('groupByProperty: note.project');
+    expect(tasksBase).toContain('groupOrderProperty: note.priority');
+    const taskViews = (parse(tasksBase) as {
+      views: Array<{ name: string; order?: string[] }>;
+    }).views;
+    expect(taskViews.find(({ name }) => name === 'Sprint board')?.order)
+      .toEqual(['file.name', 'note.estimate', 'note.due', 'note.sprint']);
+    expect(taskViews.find(({ name }) => name === 'Sprint planner')).toEqual(expect.objectContaining({
+      order: ['file.name', 'note.project', 'note.estimate', 'note.due'],
+      showPastSprints: false,
+    }));
+    expect(taskViews[0]?.name).toBe('Sprint planner');
+    expect(taskViews.find(({ name }) => name === 'Current sprint')?.order)
+      .toEqual(['file.name', 'note.estimate', 'note.due']);
+    expect(taskViews.find(({ name }) => name === 'Next sprint')?.order)
+      .toEqual(['file.name', 'note.estimate', 'note.due']);
     expect(written.get('Agile PM/AGENTS.md')).toContain(
       '`Tasks.base`, `Sprints.base`, and `Projects.base` live directly in each profile root',
     );
@@ -329,6 +371,8 @@ describe('SprintBaseGenerator', () => {
     );
     expect(written.get('Agile PM/AGENTS.md')).toContain('boolean `archived`');
     expect(written.get('Agile PM/AGENTS.md')).toContain('date `due`');
+    expect(written.get('Agile PM/AGENTS.md')).toContain('Generate future sprint');
+    expect(written.get('.agents/skills/sprint/SKILL.md')).toContain('Sprint planner');
     expect(written.get('Agile PM/Tasks/Add your first real task.md')).toContain('due:');
   });
 
@@ -346,6 +390,7 @@ describe('SprintBaseGenerator', () => {
       '    layout: kanban',
       '    cardProperty1: note.custom',
       '    cardProperty2: note.sprint',
+      '    newTaskProperty1: note.custom',
       '    customSetting: keep-me',
       '  - type: table',
       '    name: Tasks',
@@ -387,8 +432,7 @@ describe('SprintBaseGenerator', () => {
     expect(parsedTasks.views[0]).toEqual(expect.objectContaining({
       customSetting: 'keep-me',
       order: ['file.name', 'note.custom', 'note.sprint'],
-      newTaskProperty1: 'note.estimate',
-      newTaskProperty2: 'note.due',
+      newTaskProperty1: 'note.custom',
     }));
     expect(parsedTasks.views[0]).not.toHaveProperty('cardProperty1');
     expect(parsedTasks.views[0]).not.toHaveProperty('cardProperty2');
@@ -396,6 +440,13 @@ describe('SprintBaseGenerator', () => {
     expect(parsedTasks.views[1]?.order).toContain('note.archived');
     expect(parsedTasks.views[1]?.order).toContain('note.due');
     expect(parsedTasks.views[2]?.order).toEqual(['note.custom']);
+    expect(parsedTasks.views.filter(({ name }) => name === 'Sprint planner')).toEqual([
+      expect.objectContaining({
+        type: 'sprint-agent-sprint-board',
+        layout: 'planner',
+        order: ['file.name', 'note.project', 'note.estimate', 'note.due'],
+      }),
+    ]);
     expect(migrateTasksBaseContent(migratedTasks, 'agile-pm')).toBe(migratedTasks);
     expect(parsedProjects.properties['note.hidden']?.displayName).toBe('Hidden');
     expect(parsedProjects.views[0]?.order).toContain('note.hidden');
@@ -410,6 +461,82 @@ describe('SprintBaseGenerator', () => {
     ].join('\n'), 'Sprint/Tasks');
     expect(moved).toContain('file.inFolder("Sprint/Tasks")');
     expect(moved).toContain('file.ext == "md"');
+  });
+
+  it('makes Sprint planner first only for the previous generated default ordering', () => {
+    const migrated = migrateTasksBaseContent([
+      'properties:',
+      '  file.name:',
+      '    displayName: Task',
+      'views:',
+      '  - type: sprint-agent-sprint-board',
+      '    name: Sprint board',
+      '    filters:',
+      '      and:',
+      '        - note.archived != true',
+      '    order:',
+      '      - file.name',
+      '      - note.estimate',
+      '      - note.due',
+      '      - note.sprint',
+      '    sprintProfile: agile-pm',
+      '    layout: kanban',
+      '    showCompleted: true',
+      '  - type: sprint-agent-sprint-board',
+      '    name: Sprint planner',
+      '    filters:',
+      '      and:',
+      '        - note.archived != true',
+      '    order:',
+      '      - file.name',
+      '      - note.project',
+      '      - note.estimate',
+      '      - note.due',
+      '    sprintProfile: agile-pm',
+      '    layout: planner',
+      '    showCompleted: true',
+      '',
+    ].join('\n'), 'agile-pm');
+    const parsed = parse(migrated) as { views: Array<{ name: string }> };
+
+    expect(parsed.views.map(({ name }) => name)).toEqual(['Sprint planner', 'Sprint board']);
+    expect(migrateTasksBaseContent(migrated, 'agile-pm')).toBe(migrated);
+  });
+
+  it('adds Due only to previous untouched Kanban property defaults', () => {
+    const migrated = parse(migrateTasksBaseContent([
+      'properties:',
+      '  file.name:',
+      '    displayName: Task',
+      'views:',
+      '  - type: sprint-agent-sprint-board',
+      '    name: Sprint board',
+      '    sprintProfile: agile-pm',
+      '    order:',
+      '      - file.name',
+      '      - note.estimate',
+      '      - note.sprint',
+      '  - type: sprint-agent-sprint-board',
+      '    name: Current sprint',
+      '    sprintProfile: agile-pm',
+      '    order:',
+      '      - file.name',
+      '      - note.estimate',
+      '  - type: sprint-agent-sprint-board',
+      '    name: My board',
+      '    sprintProfile: agile-pm',
+      '    order:',
+      '      - file.name',
+      '      - note.custom',
+      '',
+    ].join('\n'), 'agile-pm')) as { views: Array<{ name: string; order: string[] }> };
+
+    expect(migrated.views.find(({ name }) => name === 'Sprint board')?.order)
+      .toEqual(['file.name', 'note.estimate', 'note.due', 'note.sprint']);
+    expect(migrated.views.find(({ name }) => name === 'Current sprint')?.order)
+      .toEqual(['file.name', 'note.estimate', 'note.due']);
+    expect(migrated.views.find(({ name }) => name === 'My board')?.order)
+      .toEqual(['file.name', 'note.custom']);
   });
 
   it('migrates the generated project Base owner default', async () => {

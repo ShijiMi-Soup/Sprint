@@ -1,15 +1,33 @@
 import { normalizeSprintSettings } from '@/domain/SprintSettings';
 import {
+  applyTaskSprintAssignment,
   applyTaskBoardState,
+  applyTaskProjectAssignment,
+  applyPlannerTaskDestination,
   applyNewTaskFrontmatter,
   createSprintBasesViewRegistration,
   createSprintVelocityViewRegistration,
+  formatTaskCardProperty,
+  formatTaskCompletion,
+  filterPlannerSprints,
   getCardTaskProperties,
   getEstimateTone,
   getEditableTaskProperties,
+  getNewTaskSprintScope,
   getSprintBasesOptions,
   getTaskProjectGroup,
+  getTaskGroupValue,
+  applyTaskGroupAssignment,
+  isSafeTaskGroupProperty,
+  openProjectNote,
+  parseTaskPropertyValue,
+  resolveTaskPropertyType,
+  resolveTaskGroupLabel,
+  resolveTaskGroupProperty,
   selectRecentVelocityPoints,
+  sortProjectGroups,
+  taskReferencesProject,
+  taskReferencesSprint,
 } from '@/obsidian/SprintBasesView';
 
 describe('SprintBasesView', () => {
@@ -20,31 +38,273 @@ describe('SprintBasesView', () => {
       expect.objectContaining({ key: 'sprintProfile', type: 'dropdown' }),
       expect.objectContaining({ key: 'layout', type: 'dropdown' }),
       expect.objectContaining({ key: 'showCompleted', type: 'toggle' }),
-      expect.objectContaining({
-        type: 'group',
-        displayName: 'New task form',
-        items: expect.arrayContaining([
-          expect.objectContaining({ key: 'newTaskProperty1', type: 'property' }),
-          expect.objectContaining({
-            key: 'newTaskProperty2',
-            type: 'property',
-            default: 'note.due',
-          }),
-        ]),
-      }),
+      expect.objectContaining({ key: 'groupByProperty', type: 'property' }),
+      expect.objectContaining({ key: 'groupOrder', type: 'dropdown' }),
+      expect.objectContaining({ key: 'groupOrderProperty', type: 'property' }),
+      expect.objectContaining({ key: 'groupOrderDirection', type: 'dropdown' }),
     ]));
     expect(getSprintBasesOptions(settings)).toEqual(expect.arrayContaining([
       expect.objectContaining({
         key: 'layout',
-        options: expect.objectContaining({ kanban: 'Kanban' }),
+        options: expect.objectContaining({ kanban: 'Kanban', planner: 'Sprint planner' }),
       }),
+    ]));
+    const plannerGroupOption = getSprintBasesOptions(settings, 'planner').find((option) => (
+      'key' in option && option.key === 'groupByProperty'
+    ));
+    const plannerGroupFilter = (plannerGroupOption as {
+      filter?: (property: 'note.sprint') => boolean;
+    } | undefined)?.filter;
+    expect(plannerGroupFilter?.('note.sprint')).toBe(false);
+    const currentGroupOption = getSprintBasesOptions(settings, 'kanban', 'current').find((option) => (
+      'key' in option && option.key === 'groupByProperty'
+    ));
+    const currentGroupFilter = (currentGroupOption as {
+      filter?: (property: 'note.sprint') => boolean;
+    } | undefined)?.filter;
+    expect(currentGroupFilter?.('note.sprint')).toBe(false);
+    expect(resolveTaskGroupProperty('note.sprint', 'planner', null)).toBe('note.project');
+    expect(resolveTaskGroupProperty('note.sprint', 'kanban', 'next')).toBe('note.project');
+    expect(resolveTaskGroupProperty('note.sprint', 'kanban', null)).toBe('note.sprint');
+    expect(getSprintBasesOptions(settings, 'planner')).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'showPastSprints', type: 'toggle', default: false }),
     ]));
   });
 
-  it('normalizes the properties shown in the new-task composer', () => {
-    expect(getEditableTaskProperties(['note.estimate', 'due', 'estimate', 'project']))
-      .toEqual(['estimate', 'due']);
+  it('hides past sprint columns from the planner unless explicitly enabled', () => {
+    const sprints = [
+      { name: 'Sprint 1', status: 'past' },
+      { name: 'Sprint 2', status: 'current' },
+      { name: 'Sprint 3', status: 'future' },
+    ];
+
+    expect(filterPlannerSprints(sprints, false).map(({ name }) => name))
+      .toEqual(['Sprint 2', 'Sprint 3']);
+    expect(filterPlannerSprints(sprints, true)).toEqual(sprints);
+  });
+
+  it('formats project progress as completed tasks over total tasks', () => {
+    expect(formatTaskCompletion(3, 9)).toBe('3/9 completed');
+    expect(formatTaskCompletion(0, 0)).toBe('0/0 completed');
+  });
+
+  it('groups by safe editable note properties and applies cross-group moves', () => {
+    const frontmatter: Record<string, unknown> = {
+      project: ['[[Sprint/Projects/Research]]'],
+      category: ['Coursework', 'Urgent'],
+    };
+
+    expect(getTaskGroupValue(frontmatter, 'note.project')).toEqual({
+      label: 'Research',
+      assignment: ['[[Sprint/Projects/Research]]'],
+    });
+    expect(getTaskGroupValue(frontmatter, 'note.category')).toEqual({
+      label: 'Coursework',
+      assignment: ['Coursework'],
+    });
+    applyTaskGroupAssignment(frontmatter, 'note.category', ['Research']);
+    expect(frontmatter.category).toEqual(['Research', 'Urgent']);
+    applyTaskGroupAssignment(frontmatter, 'note.category', null);
+    expect(frontmatter.category).toBeUndefined();
+    expect(isSafeTaskGroupProperty('note.project')).toBe(true);
+    expect(isSafeTaskGroupProperty('note.archived')).toBe(false);
+    expect(isSafeTaskGroupProperty('formula.task_state')).toBe(false);
+  });
+
+  it('keeps distinct linked groups separate when their display labels match', () => {
+    const assignments = new Map<string, unknown>();
+    const first = {
+      label: 'Research',
+      assignment: ['[[Sprint/Projects/Research|Research]]'],
+    };
+    const second = {
+      label: 'Research',
+      assignment: ['[[Archive/Projects/Research|Research]]'],
+    };
+
+    expect(resolveTaskGroupLabel(assignments, first)).toBe('Research');
+    assignments.set('Research', first.assignment);
+    expect(resolveTaskGroupLabel(assignments, second))
+      .toBe('Research (Archive/Projects/Research)');
+  });
+
+  it('uses the native Properties order for editable new-task fields', () => {
+    expect(getEditableTaskProperties([
+      'file.name',
+      'formula.task_state',
+      'note.due',
+      'note.project',
+      'note.sprint',
+      'note.estimate',
+      'note.archived',
+      'note.custom field',
+    ], ['note.priority'])).toEqual([
+      'due',
+      'sprint',
+      'estimate',
+      'custom field',
+    ]);
+    expect(getEditableTaskProperties(
+      ['note.estimate', 'note.sprint', 'note.due'],
+      undefined,
+      'current',
+    )).toEqual(['estimate', 'due']);
+    expect(getEditableTaskProperties(undefined, ['note.priority', 'note.due']))
+      .toEqual(['priority', 'due']);
     expect(getEditableTaskProperties(undefined)).toEqual(['estimate', 'due']);
+  });
+
+  it('resolves registered Obsidian property types and safely falls back to text', () => {
+    expect(resolveTaskPropertyType('estimate', 'text')).toBe('number');
+    expect(resolveTaskPropertyType('custom date', 'date')).toBe('date');
+    expect(resolveTaskPropertyType('custom datetime', 'datetime')).toBe('datetime');
+    expect(resolveTaskPropertyType('custom toggle', 'checkbox')).toBe('checkbox');
+    expect(resolveTaskPropertyType('custom list', 'multitext')).toBe('list');
+    expect(resolveTaskPropertyType('custom tags', 'tags')).toBe('tags');
+    expect(resolveTaskPropertyType('custom link', 'link')).toBe('link');
+    expect(resolveTaskPropertyType('unknown custom property', 'unsupported')).toBe('text');
+  });
+
+  it.each([
+    ['text', 'Read chapter', 'Read chapter'],
+    ['number', '3.5', 3.5],
+    ['checkbox', true, true],
+    ['date', '2026-09-04', '2026-09-04'],
+    ['datetime', '2026-09-04T09:30', '2026-09-04T09:30'],
+    ['list', 'research, write\nsubmit', ['research', 'write', 'submit']],
+    ['tags', 'class, urgent', ['class', 'urgent']],
+    ['link', 'Sprint 2', ['[[Sprint 2]]']],
+  ] as const)('serializes %s form values for frontmatter', (type, input, expected) => {
+    expect(parseTaskPropertyValue(type, input)).toEqual(expected);
+  });
+
+  it('uses no sprint by default on the full board and scopes Current/Next boards', () => {
+    expect(getNewTaskSprintScope(undefined)).toBeNull();
+    expect(getNewTaskSprintScope('current')).toBe('current');
+    expect(getNewTaskSprintScope('next')).toBe('next');
+  });
+
+  it('reassigns only the sprint list for Sprint Planner moves', () => {
+    const frontmatter: Record<string, unknown> = {
+      project: ['[[Sprint/Projects/Research]]'],
+      sprint: ['[[Sprint/Sprints/Sprint 1]]'],
+      'in progress': true,
+      'is done': false,
+    };
+
+    applyTaskSprintAssignment(frontmatter, 'Sprint/Sprints/Sprint 2');
+    expect(frontmatter).toEqual({
+      project: ['[[Sprint/Projects/Research]]'],
+      sprint: ['[[Sprint/Sprints/Sprint 2]]'],
+      'in progress': true,
+      'is done': false,
+    });
+
+    applyTaskSprintAssignment(frontmatter, null);
+    expect(frontmatter.sprint).toEqual([]);
+  });
+
+  it('reassigns a planner task project without changing its state', () => {
+    const frontmatter: Record<string, unknown> = {
+      project: ['[[Sprint/Projects/Research]]'],
+      sprint: ['[[Sprint/Sprints/Sprint 2]]'],
+      'in progress': true,
+      'is done': false,
+    };
+
+    applyTaskProjectAssignment(frontmatter, 'Sprint/Projects/Coursework');
+    expect(frontmatter).toEqual({
+      project: ['[[Sprint/Projects/Coursework]]'],
+      sprint: ['[[Sprint/Sprints/Sprint 2]]'],
+      'in progress': true,
+      'is done': false,
+    });
+
+    applyTaskProjectAssignment(frontmatter, null);
+    expect(frontmatter.project).toEqual([]);
+  });
+
+  it('moves a planner task to a sprint and project in one state-preserving operation', () => {
+    const frontmatter: Record<string, unknown> = {
+      project: ['[[Sprint/Projects/Research]]'],
+      sprint: ['[[Sprint/Sprints/Sprint 1]]'],
+      'in progress': true,
+      'is done': false,
+      estimate: 3,
+    };
+
+    applyPlannerTaskDestination(
+      frontmatter,
+      'Sprint/Sprints/Sprint 3',
+      'Sprint/Projects/Internship',
+    );
+
+    expect(frontmatter).toEqual({
+      project: ['[[Sprint/Projects/Internship]]'],
+      sprint: ['[[Sprint/Sprints/Sprint 3]]'],
+      'in progress': true,
+      'is done': false,
+      estimate: 3,
+    });
+  });
+
+  it('preserves an equivalent project link when moving only between sprint columns', () => {
+    const frontmatter: Record<string, unknown> = {
+      project: ['[[Welcome to Agile PM]]'],
+      sprint: ['[[Sprint/Sprints/Sprint 1]]'],
+    };
+
+    applyPlannerTaskDestination(
+      frontmatter,
+      'Sprint/Sprints/Sprint 2',
+      'Sprint/Projects/Welcome to Agile PM',
+      false,
+    );
+
+    expect(frontmatter).toEqual({
+      project: ['[[Welcome to Agile PM]]'],
+      sprint: ['[[Sprint/Sprints/Sprint 2]]'],
+    });
+  });
+
+  it('orders project groups alphabetically or by numeric priority', () => {
+    const groups: Array<[string, number]> = [
+      ['Research', 1],
+      ['No project', 0],
+      ['Coursework', 2],
+      ['Internship', 3],
+    ];
+    const priorities = new Map([
+      ['Research', 2],
+      ['Coursework', 1],
+    ]);
+
+    expect(sortProjectGroups(groups, priorities, 'alphabetical', 'asc').map(([name]) => name))
+      .toEqual(['Coursework', 'Internship', 'Research', 'No project']);
+    expect(sortProjectGroups(groups, priorities, 'priority', 'asc').map(([name]) => name))
+      .toEqual(['Coursework', 'Research', 'Internship', 'No project']);
+    expect(sortProjectGroups(groups, priorities, 'priority', 'desc').map(([name]) => name))
+      .toEqual(['Research', 'Coursework', 'Internship', 'No project']);
+    expect(sortProjectGroups(groups, priorities, 'alphabetical', 'desc').map(([name]) => name))
+      .toEqual(['Research', 'Internship', 'Coursework', 'No project']);
+  });
+
+  it('matches planner sprint assignments by full path or sprint basename', () => {
+    expect(taskReferencesSprint(
+      ['[[Sprint/Sprints/Sprint 2]]'],
+      'Sprint/Sprints/Sprint 2',
+    )).toBe(true);
+    expect(taskReferencesSprint(['[[Sprint 2]]'], 'Sprint/Sprints/Sprint 2')).toBe(true);
+    expect(taskReferencesSprint(['[[Sprint 3]]'], 'Sprint/Sprints/Sprint 2')).toBe(false);
+  });
+
+  it('matches planner project assignments by full path or project basename', () => {
+    expect(taskReferencesProject(
+      ['[[Sprint/Projects/Research]]'],
+      'Sprint/Projects/Research',
+    )).toBe(true);
+    expect(taskReferencesProject(['[[Research]]'], 'Sprint/Projects/Research')).toBe(true);
+    expect(taskReferencesProject(['[[Coursework]]'], 'Sprint/Projects/Research')).toBe(false);
   });
 
   it('uses the native Properties order for task-card metadata', () => {
@@ -55,6 +315,12 @@ describe('SprintBasesView', () => {
     expect(getCardTaskProperties(undefined, ['note.estimate', 'note.sprint']))
       .toEqual(['note.estimate', 'note.sprint']);
     expect(getCardTaskProperties(['file.name'], ['note.estimate'])).toEqual([]);
+  });
+
+  it('renders Due values as date-only YYYY/MM/DD labels', () => {
+    expect(formatTaskCardProperty('due', '2026-08-31T14:00:00')).toBe('2026/08/31');
+    expect(formatTaskCardProperty('due', '2026-09-04')).toBe('2026/09/04');
+    expect(formatTaskCardProperty('project', '[[Projects/Research]]')).toBe('Research');
   });
 
   it('applies Kanban context and editable values to a new task', () => {
@@ -77,6 +343,37 @@ describe('SprintBasesView', () => {
       estimate: 3,
       due: '2026-09-04',
     });
+  });
+
+  it('keeps an explicitly selected sprint on the full Sprint board', () => {
+    const frontmatter: Record<string, unknown> = {};
+
+    applyNewTaskFrontmatter(
+      frontmatter,
+      'Not started',
+      'Sprint/Projects/Research',
+      null,
+      { sprint: ['[[Sprint/Sprints/Sprint 3]]'], estimate: 2 },
+    );
+
+    expect(frontmatter.sprint).toEqual(['[[Sprint/Sprints/Sprint 3]]']);
+  });
+
+  it.each([
+    ['current', 'Sprint/Sprints/Sprint 1'],
+    ['next', 'Sprint/Sprints/Sprint 2'],
+  ] as const)('makes the %s board sprint assignment take precedence', (_scope, sprint) => {
+    const frontmatter: Record<string, unknown> = {};
+
+    applyNewTaskFrontmatter(
+      frontmatter,
+      'Not started',
+      null,
+      sprint,
+      { sprint: ['[[Sprint/Sprints/Incorrect sprint]]'] },
+    );
+
+    expect(frontmatter.sprint).toEqual([`[[${sprint}]]`]);
   });
 
   it('adds a blank Due date to new tasks when one is not entered', () => {
@@ -144,6 +441,16 @@ describe('SprintBasesView', () => {
     [{}, 'No project'],
   ])('resolves task project swimlanes', (frontmatter, expected) => {
     expect(getTaskProjectGroup(frontmatter)).toBe(expected);
+  });
+
+  it('opens a Kanban project note at its exact vault path', () => {
+    const openLinkText = jest.fn();
+    const app = { workspace: { openLinkText } };
+    const file = { path: 'Sprint/Projects/Research project.md' };
+
+    openProjectNote(app as never, file as never);
+
+    expect(openLinkText).toHaveBeenCalledWith(file.path, '', false);
   });
 
   it('keeps zero-point sprints in the recent Velocity series', () => {

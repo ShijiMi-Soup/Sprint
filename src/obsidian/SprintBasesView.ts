@@ -11,6 +11,7 @@ import type {
 import { BasesView, normalizePath, Notice, setIcon } from 'obsidian';
 
 import type { SprintSettings } from '../domain/types';
+import type { FutureSprintGenerationResult } from '../domain/SprintManager';
 
 export const SPRINT_BASES_VIEW_TYPE = 'sprint-agent-sprint-board';
 export const SPRINT_VELOCITY_VIEW_TYPE = 'sprint-agent-velocity-chart';
@@ -45,14 +46,15 @@ export function applyNewTaskFrontmatter(
   state: TaskBoardState,
   projectTarget: string | null,
   sprintTarget: string | null,
-  properties: Record<string, string | number | null>,
+  properties: Record<string, unknown>,
 ): void {
   applyTaskBoardState(frontmatter, state);
   if (frontmatter.archived === undefined) frontmatter.archived = false;
   if (frontmatter.due === undefined && properties.due === undefined) frontmatter.due = null;
   if (projectTarget) frontmatter.project = [`[[${projectTarget}]]`];
-  if (sprintTarget) frontmatter.sprint = [`[[${sprintTarget}]]`];
   Object.assign(frontmatter, properties);
+  // Scoped boards own sprint assignment, even when a legacy form setting exists.
+  if (sprintTarget) frontmatter.sprint = [`[[${sprintTarget}]]`];
 }
 
 export function getTaskProjectGroup(
@@ -70,15 +72,181 @@ export function getTaskProjectGroup(
   return alias?.trim() || target.split('/').at(-1)?.trim() || 'No project';
 }
 
+export function applyTaskProjectAssignment(
+  frontmatter: Record<string, unknown>,
+  projectTarget: string | null,
+): void {
+  frontmatter.project = projectTarget ? [`[[${projectTarget}]]`] : [];
+}
+
+export function applyPlannerTaskDestination(
+  frontmatter: Record<string, unknown>,
+  sprintTarget: string | null,
+  projectTarget: string | null,
+  updateProject = true,
+): void {
+  applyTaskSprintAssignment(frontmatter, sprintTarget);
+  if (updateProject) applyTaskProjectAssignment(frontmatter, projectTarget);
+}
+
+export function taskReferencesProject(value: unknown, projectTarget: string): boolean {
+  const projectName = projectTarget.split('/').at(-1) ?? projectTarget;
+  return sprintReferences(value, projectTarget) || sprintReferences(value, projectName);
+}
+
+export function sortProjectGroups<T>(
+  groups: Array<[string, T]>,
+  priorities: ReadonlyMap<string, number>,
+  configuredOrder: unknown,
+  configuredDirection: unknown,
+): Array<[string, T]> {
+  const order = configuredOrder === 'priority' || configuredOrder === 'property'
+    ? 'property'
+    : 'alphabetical';
+  const direction = configuredDirection === 'desc' ? -1 : 1;
+  return [...groups].sort(([left], [right]) => {
+    if (left.startsWith('No ')) return 1;
+    if (right.startsWith('No ')) return -1;
+    if (order === 'property') {
+      const leftPriority = priorities.get(left);
+      const rightPriority = priorities.get(right);
+      const hasLeftPriority = leftPriority !== undefined && Number.isFinite(leftPriority);
+      const hasRightPriority = rightPriority !== undefined && Number.isFinite(rightPriority);
+      if (hasLeftPriority && !hasRightPriority) return -1;
+      if (!hasLeftPriority && hasRightPriority) return 1;
+      if (hasLeftPriority && hasRightPriority && leftPriority !== rightPriority) {
+        return (leftPriority - rightPriority) * direction;
+      }
+    }
+    return left.localeCompare(right) * direction;
+  });
+}
+
+export function formatTaskCompletion(completed: number, total: number): string {
+  return `${completed}/${total} completed`;
+}
+
+export interface TaskGroupValue {
+  label: string;
+  assignment: unknown;
+}
+
+function taskGroupAssignmentKey(assignment: unknown): string {
+  try {
+    return JSON.stringify(assignment) ?? '';
+  } catch {
+    return '';
+  }
+}
+
+export function resolveTaskGroupLabel(
+  assignments: ReadonlyMap<string, unknown>,
+  group: TaskGroupValue,
+): string {
+  const existing = assignments.get(group.label);
+  if (existing === undefined
+    || taskGroupAssignmentKey(existing) === taskGroupAssignmentKey(group.assignment)) {
+    return group.label;
+  }
+  const assignmentValues: unknown[] = Array.isArray(group.assignment)
+    ? group.assignment as unknown[]
+    : [group.assignment];
+  const target: unknown = assignmentValues[0];
+  const detail = typeof target === 'string'
+    ? target.replace(/^\[\[/, '').replace(/\]\]$/, '').split('|')[0]?.trim()
+    : '';
+  return detail ? `${group.label} (${detail})` : `${group.label} (distinct value)`;
+}
+
+export function getTaskGroupValue(
+  frontmatter: Record<string, unknown> | undefined,
+  propertyId: BasesPropertyId,
+): TaskGroupValue {
+  const property = propertyId.replace(/^note\./, '');
+  const value = frontmatter?.[property];
+  const values: unknown[] = Array.isArray(value) ? value as unknown[] : [value];
+  const first: unknown = values[0];
+  if (first === undefined || first === null || first === '') {
+    return { label: `No ${property}`, assignment: null };
+  }
+  const fallback = typeof first === 'string'
+    || typeof first === 'number'
+    || typeof first === 'boolean'
+    ? String(first)
+    : 'Other';
+  const label = formatTaskCardProperty(property, first) || fallback;
+  return {
+    label,
+    assignment: Array.isArray(value) ? [first] : first,
+  };
+}
+
+export function applyTaskGroupAssignment(
+  frontmatter: Record<string, unknown>,
+  propertyId: BasesPropertyId,
+  assignment: unknown,
+): void {
+  if (!propertyId.startsWith('note.')) return;
+  const property = propertyId.replace(/^note\./, '');
+  if (assignment === null || assignment === undefined || assignment === '') {
+    if (property === 'project' || property === 'sprint') frontmatter[property] = [];
+    else delete frontmatter[property];
+    return;
+  }
+  const current = frontmatter[property];
+  if (Array.isArray(current)) {
+    const currentValues = current as unknown[];
+    const replacement: unknown[] = Array.isArray(assignment)
+      ? assignment as unknown[]
+      : [assignment];
+    const replacementKeys = new Set(replacement.map(taskGroupAssignmentKey));
+    frontmatter[property] = [
+      ...replacement,
+      ...currentValues.slice(1).filter((value) => (
+        !replacementKeys.has(taskGroupAssignmentKey(value))
+      )),
+    ];
+    return;
+  }
+  frontmatter[property] = assignment;
+}
+
+export function isSafeTaskGroupProperty(propertyId: BasesPropertyId): boolean {
+  return propertyId.startsWith('note.') && ![
+    'note.in progress',
+    'note.is done',
+    'note.archived',
+  ].includes(propertyId);
+}
+
+export function resolveTaskGroupProperty(
+  configuredProperty: BasesPropertyId | null,
+  layout: unknown,
+  sprintScope: unknown,
+): BasesPropertyId {
+  if (!configuredProperty || !isSafeTaskGroupProperty(configuredProperty)) return 'note.project';
+  if (configuredProperty === 'note.sprint'
+    && (layout === 'planner' || sprintScope === 'current' || sprintScope === 'next')) {
+    return 'note.project';
+  }
+  return configuredProperty;
+}
+
+export function openProjectNote(app: App, file: TFile): void {
+  void app.workspace.openLinkText(file.path, '', false);
+}
+
 export function getSprintBasesOptions(
   settings: SprintSettings,
+  configuredLayout?: unknown,
+  configuredSprintScope?: unknown,
 ): BasesAllOptions[] {
   const profiles = Object.fromEntries(
     settings.profiles.map((profile) => [profile.id, profile.name]),
   );
   if (Object.keys(profiles).length === 0) profiles.none = 'No Sprint workspace';
 
-  return [
+  const options: BasesAllOptions[] = [
     {
       key: 'sprintProfile',
       type: 'dropdown',
@@ -91,7 +259,7 @@ export function getSprintBasesOptions(
       type: 'dropdown',
       displayName: 'Layout',
       default: 'board',
-      options: { board: 'Board', list: 'List', kanban: 'Kanban' },
+      options: { board: 'Board', list: 'List', kanban: 'Kanban', planner: 'Sprint planner' },
     },
     {
       key: 'showCompleted',
@@ -100,20 +268,60 @@ export function getSprintBasesOptions(
       default: true,
     },
     {
-      type: 'group',
-      displayName: 'New task form',
-      items: [1, 2, 3].map((position) => ({
-        key: `newTaskProperty${position}`,
-        type: 'property' as const,
-        displayName: `Property ${position}`,
-        default: position === 1
-          ? 'note.estimate'
-          : position === 2 ? 'note.due' : undefined,
-        placeholder: position === 1 ? 'Estimate' : position === 2 ? 'Due' : 'None',
-        filter: isEditableTaskProperty,
-      })),
+      key: 'groupByProperty',
+      type: 'property',
+      displayName: 'Group by',
+      default: 'note.project',
+      placeholder: 'Project',
+      filter: (property) => (
+        isSafeTaskGroupProperty(property)
+        && !(property === 'note.sprint' && (
+          configuredLayout === 'planner'
+          || configuredSprintScope === 'current'
+          || configuredSprintScope === 'next'
+        ))
+      ),
+    },
+    {
+      key: 'groupOrder',
+      type: 'dropdown',
+      displayName: 'Order groups by',
+      default: 'alphabetical',
+      options: { alphabetical: 'Name', property: 'Selected property' },
+    },
+    {
+      key: 'groupOrderProperty',
+      type: 'property',
+      displayName: 'Group order property',
+      default: 'note.priority',
+      placeholder: 'Priority',
+      filter: (property) => property.startsWith('note.'),
+    },
+    {
+      key: 'groupOrderDirection',
+      type: 'dropdown',
+      displayName: 'Group direction',
+      default: 'asc',
+      options: { asc: 'Ascending', desc: 'Descending' },
     },
   ];
+  if (configuredLayout === 'planner') {
+    options.splice(3, 0, {
+      key: 'showPastSprints',
+      type: 'toggle',
+      displayName: 'Show past sprints',
+      default: false,
+    });
+  }
+  return options;
+}
+
+export function filterPlannerSprints<T extends { status: string }>(
+  sprints: T[],
+  showPastSprints: unknown,
+): T[] {
+  if (showPastSprints === true) return sprints;
+  return sprints.filter(({ status }) => status.toLowerCase() !== 'past');
 }
 
 function isCardTaskProperty(property: BasesPropertyId): boolean {
@@ -135,29 +343,100 @@ export function getCardTaskProperties(
   )))];
 }
 
-function isEditableTaskProperty(property: BasesPropertyId): boolean {
-  return property.startsWith('note.') && ![
-    'note.project',
-    'note.sprint',
-    'note.in progress',
-    'note.is done',
-    'note.archived',
-  ].includes(property);
+const TASK_FORM_EXCLUDED_PROPERTIES = new Set([
+  'project',
+  'in progress',
+  'is done',
+  'archived',
+]);
+
+export type TaskPropertyType = 'text' | 'number' | 'checkbox' | 'date' | 'datetime' | 'list' | 'tags' | 'link';
+
+const DEFAULT_TASK_PROPERTY_TYPES: Record<string, TaskPropertyType> = {
+  estimate: 'number',
+  priority: 'number',
+  due: 'date',
+  'due date': 'date',
+  archived: 'checkbox',
+  'in progress': 'checkbox',
+  'is done': 'checkbox',
+  project: 'link',
+  sprint: 'link',
+};
+
+export function getEditableTaskProperties(
+  order: unknown,
+  legacyProperties?: unknown,
+  sprintScope?: unknown,
+): string[] {
+  const source = Array.isArray(order) ? order : legacyProperties;
+  if (!Array.isArray(source)) return ['estimate', 'due'];
+  const scoped = sprintScope === 'current' || sprintScope === 'next';
+  return [...new Set(source
+    .filter((entry): entry is string => typeof entry === 'string' && entry.startsWith('note.'))
+    .map((entry) => entry.trim().replace(/^note\./, ''))
+    .filter((entry) => entry.length > 0 && !TASK_FORM_EXCLUDED_PROPERTIES.has(entry))
+    .filter((entry) => !scoped || entry !== 'sprint'))];
 }
 
-export function getEditableTaskProperties(value: unknown): string[] {
-  if (!Array.isArray(value)) return ['estimate', 'due'];
-  return [...new Set(value
-    .filter((entry): entry is string => typeof entry === 'string')
-    .map((entry) => entry.trim().replace(/^note\./, ''))
-    .filter((entry) => entry.length > 0 && ![
-      'project',
-      'sprint',
-      'in progress',
-      'is done',
-      'archived',
-    ].includes(entry)))];
+export function resolveTaskPropertyType(
+  property: string,
+  registeredType: unknown,
+): TaskPropertyType {
+  if (property in DEFAULT_TASK_PROPERTY_TYPES) return DEFAULT_TASK_PROPERTY_TYPES[property]!;
+  switch (registeredType) {
+    case 'number': return 'number';
+    case 'checkbox': return 'checkbox';
+    case 'date': return 'date';
+    case 'datetime': return 'datetime';
+    case 'multitext':
+    case 'list': return 'list';
+    case 'tags': return 'tags';
+    case 'link': return 'link';
+    default: return 'text';
+  }
 }
+
+export function parseTaskPropertyValue(
+  type: TaskPropertyType,
+  value: string | boolean,
+): unknown {
+  if (type === 'checkbox') return value === true;
+  if (typeof value !== 'string') return undefined;
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+  if (type === 'number') {
+    const number = Number(trimmed);
+    return Number.isFinite(number) ? number : undefined;
+  }
+  if (type === 'list' || type === 'tags') {
+    const values = trimmed.split(/[\n,]/).map((entry) => entry.trim()).filter(Boolean);
+    return values.length > 0 ? values : undefined;
+  }
+  if (type === 'link') return [`[[${trimmed.replace(/^\[\[|\]\]$/g, '')}]]`];
+  return trimmed;
+}
+
+export function getNewTaskSprintScope(configuredScope: unknown): 'current' | 'next' | null {
+  return configuredScope === 'current' || configuredScope === 'next' ? configuredScope : null;
+}
+
+export function applyTaskSprintAssignment(
+  frontmatter: Record<string, unknown>,
+  sprintTarget: string | null,
+): void {
+  frontmatter.sprint = sprintTarget ? [`[[${sprintTarget}]]`] : [];
+}
+
+export function taskReferencesSprint(value: unknown, sprintTarget: string): boolean {
+  const sprintName = sprintTarget.split('/').at(-1) ?? sprintTarget;
+  return sprintReferences(value, sprintTarget) || sprintReferences(value, sprintName);
+}
+
+type NewTaskPropertyInput = {
+  type: TaskPropertyType;
+  input: HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement;
+};
 
 function sprintReferences(value: unknown, sprintName: string): boolean {
   const values = Array.isArray(value) ? value : [value];
@@ -190,6 +469,27 @@ export function getEstimateTone(points: number): 'low' | 'medium' | 'high' | 'cr
   return 'low';
 }
 
+export function formatTaskCardProperty(property: string, value: unknown): string {
+  if (Array.isArray(value)) {
+    return value
+      .map((entry) => formatTaskCardProperty(property, entry))
+      .filter(Boolean)
+      .join(', ');
+  }
+  if (typeof value === 'string') {
+    const normalized = value.trim();
+    if (property === 'due' || property === 'due date') {
+      const date = /^(\d{4})-(\d{2})-(\d{2})(?:T.*)?$/.exec(normalized);
+      if (date) return `${date[1]}/${date[2]}/${date[3]}`;
+    }
+    const link = normalized.replace(/^\[\[/, '').replace(/\]\]$/, '');
+    const [target = '', alias] = link.split('|');
+    return alias?.trim() || target.split('/').at(-1)?.trim() || '';
+  }
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+  return '';
+}
+
 class SprintBasesView extends BasesView {
   readonly type = SPRINT_BASES_VIEW_TYPE;
   private readonly containerEl: HTMLElement;
@@ -202,6 +502,7 @@ class SprintBasesView extends BasesView {
     controller: QueryController,
     parentEl: HTMLElement,
     private readonly getSettings: () => SprintSettings,
+    private readonly generateFutureSprint?: () => Promise<FutureSprintGenerationResult>,
   ) {
     super(controller);
     this.containerEl = parentEl.createDiv({ cls: 'sprint-bases-view' });
@@ -223,7 +524,11 @@ class SprintBasesView extends BasesView {
     });
 
     const configuredLayout = this.config.get('layout');
-    const layout = configuredLayout === 'list' || configuredLayout === 'kanban' ? configuredLayout : 'board';
+    const layout = configuredLayout === 'list'
+      || configuredLayout === 'kanban'
+      || configuredLayout === 'planner'
+      ? configuredLayout
+      : 'board';
     const content = this.containerEl.createDiv({
       cls: `sprint-bases-content sprint-bases-${layout}`,
     });
@@ -234,6 +539,10 @@ class SprintBasesView extends BasesView {
     }
     if (layout === 'kanban') {
       this.renderKanban(content, showCompleted, profile);
+      return;
+    }
+    if (layout === 'planner') {
+      this.renderSprintPlanner(content, showCompleted, profile);
       return;
     }
 
@@ -270,8 +579,16 @@ class SprintBasesView extends BasesView {
     showCompleted: boolean,
     profile: SprintSettings['profiles'][number] | undefined,
   ): void {
+    const configuredGroupProperty = this.config.getAsPropertyId('groupByProperty');
+    const groupProperty = resolveTaskGroupProperty(
+      configuredGroupProperty,
+      'kanban',
+      this.config.get('sprintScope'),
+    );
+    const groupsByProject = groupProperty === 'note.project';
     const projects = new Map<string, Map<TaskBoardState, BasesEntry[]>>();
     const projectTargets = new Map<string, string>();
+    const groupAssignments = new Map<string, unknown>();
     const projectFileByGroup = new Map<string, TFile>();
     const projectFiles = profile?.rootFolder
       ? this.filesIn(`${profile.rootFolder.replace(/^\/+|\/+$/g, '')}/Projects`)
@@ -297,12 +614,22 @@ class SprintBasesView extends BasesView {
         const frontmatter = this.app.metadataCache.getFileCache(entry.file)?.frontmatter;
         if (frontmatter?.archived === true) continue;
         if (!showCompleted && isDone(frontmatter)) continue;
-        const projectFile = findProjectFile(frontmatter);
-        if (scoped && projectFile && !isActiveProject(projectFile)) continue;
-        const project = getTaskProjectGroup(frontmatter);
-        if (projectFile) projectFileByGroup.set(project, projectFile);
+        const actualProjectFile = findProjectFile(frontmatter);
+        if (scoped && actualProjectFile && !isActiveProject(actualProjectFile)) continue;
+        const group = groupsByProject
+          ? {
+            label: getTaskProjectGroup(frontmatter),
+            assignment: getFrontmatterProperty(frontmatter, 'project') ?? null,
+          }
+          : getTaskGroupValue(frontmatter, groupProperty);
+        const project = resolveTaskGroupLabel(groupAssignments, group);
+        if (!groupAssignments.has(project)) groupAssignments.set(project, group.assignment);
+        const groupFile = groupsByProject
+          ? actualProjectFile
+          : this.getReferenceFile(group.assignment);
+        if (groupFile) projectFileByGroup.set(project, groupFile);
         const projectTarget = this.getReferenceTarget(frontmatter?.project);
-        if (projectTarget) projectTargets.set(project, projectTarget);
+        if (groupsByProject && projectTarget) projectTargets.set(project, projectTarget);
         const columns = projects.get(project) ?? new Map(
           TASK_STATES.map((state) => [state, [] as BasesEntry[]]),
         );
@@ -311,8 +638,11 @@ class SprintBasesView extends BasesView {
       }
     }
 
-    if (profile?.rootFolder) {
+    if (profile?.rootFolder && groupsByProject) {
       for (const projectFile of projectFiles) {
+        const existingGroup = [...projectFileByGroup.entries()]
+          .find(([, candidate]) => candidate.path === projectFile.path)?.[0];
+        if (existingGroup) continue;
         if (scoped && !isActiveProject(projectFile)) continue;
         if (!projects.has(projectFile.basename)) {
           projects.set(projectFile.basename, new Map(
@@ -320,26 +650,39 @@ class SprintBasesView extends BasesView {
           ));
         }
         projectTargets.set(projectFile.basename, projectFile.path.replace(/\.md$/, ''));
+        groupAssignments.set(projectFile.basename, [`[[${projectFile.path.replace(/\.md$/, '')}]]`]);
         projectFileByGroup.set(projectFile.basename, projectFile);
       }
     }
-    if (!projects.has('No project')) {
-      projects.set('No project', new Map(
+    const emptyGroup = groupsByProject ? 'No project' : `No ${groupProperty.replace(/^note\./, '')}`;
+    if (!projects.has(emptyGroup)) {
+      projects.set(emptyGroup, new Map(
         TASK_STATES.map((state) => [state, [] as BasesEntry[]]),
       ));
+      groupAssignments.set(emptyGroup, null);
     }
 
-    const sortedProjects = [...projects.entries()].sort(([left], [right]) => {
-      if (left === 'No project') return 1;
-      if (right === 'No project') return -1;
-      return left.localeCompare(right);
-    });
+    const groupOrderProperty = (this.config.getAsPropertyId('groupOrderProperty') ?? 'note.priority')
+      .replace(/^note\./, '');
+    const projectPriorities = new Map([...projectFileByGroup.entries()].map(([group, file]) => {
+      const priority = getFrontmatterProperty(
+        this.app.metadataCache.getFileCache(file)?.frontmatter,
+        groupOrderProperty,
+      );
+      return [group, typeof priority === 'number' ? priority : Number.POSITIVE_INFINITY];
+    }));
+    const sortedProjects = sortProjectGroups(
+      [...projects.entries()],
+      projectPriorities,
+      this.config.get('groupOrder'),
+      this.config.get('groupOrderDirection'),
+    );
     const visibleProjects: typeof sortedProjects = [];
     const hiddenProjects: typeof sortedProjects = [];
     for (const item of sortedProjects) {
       const [project] = item;
       const projectFile = projectFileByGroup.get(project);
-      const hidden = projectFile
+      const hidden = groupsByProject && projectFile
         ? this.app.metadataCache.getFileCache(projectFile)?.frontmatter?.hidden === true
         : false;
       (hidden ? hiddenProjects : visibleProjects).push(item);
@@ -351,36 +694,16 @@ class SprintBasesView extends BasesView {
       columns: Map<TaskBoardState, BasesEntry[]>,
       hidden: boolean,
     ): void => {
-      const projectSection = parent.createEl('details', { cls: 'sprint-bases-project' });
-      projectSection.open = !this.collapsedProjects.has(project);
-      projectSection.addEventListener('toggle', () => {
-        if (projectSection.open) this.collapsedProjects.delete(project);
-        else this.collapsedProjects.add(project);
-      });
-      const projectHeader = projectSection.createEl('summary', { cls: 'sprint-bases-project-header' });
-      projectHeader.createSpan({ cls: 'sprint-bases-project-title', text: project });
-      projectHeader.createSpan({
-        cls: 'sprint-bases-project-count',
-        text: String([...columns.values()].reduce((total, entries) => total + entries.length, 0)),
-      });
       const projectFile = projectFileByGroup.get(project);
-      if (projectFile) {
-        const visibility = projectHeader.createEl('button', {
-          cls: 'sprint-bases-project-visibility clickable-icon',
-          attr: {
-            type: 'button',
-            'aria-label': hidden ? 'Show project' : 'Hide project',
-            title: hidden ? 'Show project' : 'Hide project',
-          },
-        });
-        setIcon(visibility, hidden ? 'eye' : 'eye-off');
-        visibility.addEventListener('click', (event) => {
-          event.preventDefault();
-          event.stopPropagation();
-          void this.setProjectHidden(projectFile, !hidden);
-        });
-      }
-      const board = projectSection.createDiv({ cls: 'sprint-bases-project-board' });
+      const board = this.createTaskSwimlane(
+        parent,
+        project,
+        [...columns.values()].reduce((total, entries) => total + entries.length, 0),
+        columns.get('Done')?.length ?? 0,
+        projectFile,
+        'sprint-bases-project-board',
+        groupsByProject ? hidden : undefined,
+      );
       for (const state of TASK_STATES) {
         const section = board.createDiv({
           cls: 'sprint-bases-group',
@@ -388,7 +711,14 @@ class SprintBasesView extends BasesView {
         });
         section.createEl('h5', { text: state });
         const entries = section.createDiv({ cls: 'sprint-bases-entries' });
-        this.registerDropTarget(section, entries, state, project);
+        this.registerDropTarget(
+          section,
+          entries,
+          state,
+          project,
+          groupProperty,
+          groupAssignments.get(project) ?? null,
+        );
         const stateEntries = columns.get(state) ?? [];
         if (stateEntries.length === 0) {
           entries.createDiv({ cls: 'sprint-bases-empty', text: 'No tasks' });
@@ -402,6 +732,8 @@ class SprintBasesView extends BasesView {
           project,
           projectTargets.get(project) ?? null,
           profile,
+          groupProperty,
+          groupAssignments.get(project) ?? null,
         );
       }
     };
@@ -422,6 +754,573 @@ class SprintBasesView extends BasesView {
     }
   }
 
+  private renderSprintPlanner(
+    content: HTMLElement,
+    showCompleted: boolean,
+    profile: SprintSettings['profiles'][number] | undefined,
+  ): void {
+    if (!profile?.rootFolder) {
+      content.createDiv({ cls: 'sprint-bases-empty', text: 'No Sprint workspace is configured.' });
+      return;
+    }
+
+    const root = profile.rootFolder.replace(/^\/+|\/+$/g, '');
+    const configuredGroupProperty = this.config.getAsPropertyId('groupByProperty');
+    const groupProperty = resolveTaskGroupProperty(configuredGroupProperty, 'planner', null);
+    const groupsByProject = groupProperty === 'note.project';
+    const projectFiles = this.filesIn(`${root}/Projects`);
+    const projectFileByName = new Map(projectFiles.map((file) => [file.basename, file]));
+    const projectFileByGroup = new Map<string, TFile>();
+    const projectTargets = new Map<string, string>();
+    const groupAssignments = new Map<string, unknown>();
+    const findProjectFile = (frontmatter: Record<string, unknown> | undefined): TFile | null => {
+      const target = this.getReferenceTarget(frontmatter?.project);
+      if (!target) return null;
+      return this.app.vault.getFileByPath(`${target}.md`)
+        ?? projectFileByName.get(target.split('/').at(-1) ?? '')
+        ?? null;
+    };
+    const allSprints = this.filesIn(`${root}/Sprints`)
+      .map((file) => {
+        const frontmatter = this.app.metadataCache.getFileCache(file)?.frontmatter;
+        return {
+          file,
+          target: file.path.replace(/\.md$/, ''),
+          startDate: String(frontmatter?.['start date'] ?? ''),
+          sprintNumber: typeof frontmatter?.['sprint number'] === 'number'
+            ? frontmatter['sprint number']
+            : Number.POSITIVE_INFINITY,
+          status: typeof frontmatter?.['sprint status'] === 'string'
+            ? frontmatter['sprint status']
+            : '',
+        };
+      })
+      .sort((left, right) => (
+        left.startDate.localeCompare(right.startDate)
+        || left.sprintNumber - right.sprintNumber
+        || left.file.basename.localeCompare(right.file.basename)
+      ));
+    const showPastSprints = this.config.get('showPastSprints') === true;
+    const sprints = filterPlannerSprints(allSprints, showPastSprints);
+    const columns: Array<{ name: string; target: string | null; status: string }> = [
+      { name: 'Backlog', target: null, status: '' },
+      ...sprints.map((sprint) => ({
+        name: sprint.file.basename,
+        target: sprint.target,
+        status: sprint.status,
+      })),
+    ];
+    const projects = new Map<string, Map<string | null, BasesEntry[]>>();
+    const seen = new Set<string>();
+    for (const group of this.data.groupedData) {
+      for (const entry of group.entries) {
+        if (seen.has(entry.file.path)) continue;
+        seen.add(entry.file.path);
+        const frontmatter = this.app.metadataCache.getFileCache(entry.file)?.frontmatter;
+        if (frontmatter?.archived === true) continue;
+        if (!showCompleted && isDone(frontmatter)) continue;
+        const sprint = sprints.find(({ target }) => taskReferencesSprint(frontmatter?.sprint, target));
+        const belongsToHiddenPastSprint = !sprint && allSprints.some(({ target, status }) => (
+          status.toLowerCase() === 'past'
+          && taskReferencesSprint(frontmatter?.sprint, target)
+        ));
+        if (belongsToHiddenPastSprint) continue;
+        const rawGroup = getTaskGroupValue(frontmatter, groupProperty);
+        const projectFile = groupsByProject
+          ? findProjectFile(frontmatter)
+          : this.getReferenceFile(rawGroup.assignment);
+        const projectTarget = projectFile?.path.replace(/\.md$/, '')
+          ?? this.getReferenceTarget(frontmatter?.project);
+        const group = groupsByProject
+          ? {
+            label: projectFile?.basename ?? getTaskProjectGroup(frontmatter),
+            assignment: projectTarget ? [`[[${projectTarget}]]`] : null,
+          }
+          : rawGroup;
+        const project = resolveTaskGroupLabel(groupAssignments, group);
+        if (!groupAssignments.has(project)) groupAssignments.set(project, group.assignment);
+        if (projectFile) projectFileByGroup.set(project, projectFile);
+        if (projectTarget) projectTargets.set(project, projectTarget);
+        const projectColumns = projects.get(project) ?? new Map(
+          columns.map(({ target }) => [target, [] as BasesEntry[]]),
+        );
+        projectColumns.get(sprint?.target ?? null)?.push(entry);
+        projects.set(project, projectColumns);
+      }
+    }
+
+    for (const projectFile of groupsByProject ? projectFiles : []) {
+      const existingGroup = [...projectFileByGroup.entries()]
+        .find(([, candidate]) => candidate.path === projectFile.path)?.[0];
+      if (existingGroup) continue;
+      if (!projects.has(projectFile.basename)) {
+        projects.set(projectFile.basename, new Map(
+          columns.map(({ target }) => [target, [] as BasesEntry[]]),
+        ));
+      }
+      projectTargets.set(projectFile.basename, projectFile.path.replace(/\.md$/, ''));
+      groupAssignments.set(projectFile.basename, [`[[${projectFile.path.replace(/\.md$/, '')}]]`]);
+      projectFileByGroup.set(projectFile.basename, projectFile);
+    }
+    const emptyGroup = groupsByProject ? 'No project' : `No ${groupProperty.replace(/^note\./, '')}`;
+    if (!projects.has(emptyGroup)) {
+      projects.set(emptyGroup, new Map(
+        columns.map(({ target }) => [target, [] as BasesEntry[]]),
+      ));
+      groupAssignments.set(emptyGroup, null);
+    }
+
+    const groupOrderProperty = (this.config.getAsPropertyId('groupOrderProperty') ?? 'note.priority')
+      .replace(/^note\./, '');
+    const projectPriorities = new Map([...projectFileByGroup.entries()].map(([group, file]) => {
+      const priority = getFrontmatterProperty(
+        this.app.metadataCache.getFileCache(file)?.frontmatter,
+        groupOrderProperty,
+      );
+      return [group, typeof priority === 'number' ? priority : Number.POSITIVE_INFINITY];
+    }));
+    const sortedProjects = sortProjectGroups(
+      [...projects.entries()],
+      projectPriorities,
+      this.config.get('groupOrder'),
+      this.config.get('groupOrderDirection'),
+    );
+    for (const [project, projectColumns] of sortedProjects) {
+      const projectFile = projectFileByGroup.get(project);
+      const board = this.createTaskSwimlane(
+        content,
+        project,
+        [...projectColumns.values()].reduce((total, entries) => total + entries.length, 0),
+        [...projectColumns.values()].flat().filter((entry) => isDone(
+          this.app.metadataCache.getFileCache(entry.file)?.frontmatter,
+        )).length,
+        projectFile,
+        'sprint-planner-board sprint-bases-project-board',
+      );
+      board.setCssProps({ '--sprint-planner-column-count': String(columns.length) });
+      for (const column of columns) {
+        const section = board.createDiv({
+          cls: 'sprint-planner-column',
+          attr: {
+            'data-sprint-target': column.target ?? '',
+            'data-project-group': project,
+            'data-project-target': projectTargets.get(project) ?? '',
+          },
+        });
+        const header = section.createDiv({ cls: 'sprint-planner-column-header' });
+        const heading = header.createDiv({ cls: 'sprint-planner-column-heading' });
+        heading.createEl('h4', { text: column.name });
+        if (column.status) {
+          heading.createSpan({ cls: 'sprint-planner-status', text: column.status });
+        }
+        header.createDiv({ cls: 'sprint-planner-column-metrics' });
+        const entries = section.createDiv({ cls: 'sprint-planner-entries' });
+        this.registerPlannerDropTarget(
+          section,
+          entries,
+          column.target,
+          project,
+          projectTargets.get(project) ?? null,
+          groupProperty,
+          groupAssignments.get(project) ?? null,
+        );
+        const columnEntries = projectColumns.get(column.target) ?? [];
+        columnEntries.sort((left, right) => left.file.basename.localeCompare(right.file.basename));
+        for (const entry of columnEntries) {
+          this.renderPlannerTaskCard(
+            entries,
+            entry,
+            column.target,
+            project,
+            projectTargets.get(project) ?? null,
+            columns,
+            groupProperty,
+            groupAssignments.get(project) ?? null,
+          );
+        }
+        this.ensurePlannerColumnEmptyState(entries);
+        this.updatePlannerColumnMetrics(section);
+      }
+      this.renderAddSprintButton(
+        board,
+        root,
+        'sprint-planner-add-column',
+        'sprint-add-sprint-button sprint-planner-add-button',
+        true,
+      );
+    }
+  }
+
+  private createTaskSwimlane(
+    parent: HTMLElement,
+    project: string,
+    taskCount: number,
+    completedTaskCount: number,
+    projectFile: TFile | undefined,
+    boardClass: string,
+    hidden?: boolean,
+  ): HTMLElement {
+    const projectSection = parent.createEl('details', { cls: 'sprint-bases-project' });
+    projectSection.dataset.projectGroup = project;
+    projectSection.open = !this.collapsedProjects.has(project);
+    projectSection.addEventListener('toggle', () => {
+      if (projectSection.open) this.collapsedProjects.delete(project);
+      else this.collapsedProjects.add(project);
+    });
+    const projectHeader = projectSection.createEl('summary', { cls: 'sprint-bases-project-header' });
+    projectHeader.createSpan({ cls: 'sprint-bases-project-title', text: project });
+    if (projectFile) {
+      const projectLink = projectHeader.createEl('button', {
+        cls: 'sprint-bases-project-link clickable-icon',
+        attr: {
+          type: 'button',
+          'aria-label': `Open ${project}`,
+          title: `Open ${project}`,
+        },
+      });
+      setIcon(projectLink, 'external-link');
+      projectLink.addEventListener('click', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        openProjectNote(this.app, projectFile);
+      });
+    }
+    const progress = formatTaskCompletion(completedTaskCount, taskCount);
+    projectHeader.createSpan({
+      cls: 'sprint-bases-project-count',
+      text: progress,
+      attr: { 'aria-label': `${project}: ${progress}` },
+    });
+    if (projectFile && hidden !== undefined) {
+      const visibility = projectHeader.createEl('button', {
+        cls: 'sprint-bases-project-visibility clickable-icon',
+        attr: {
+          type: 'button',
+          'aria-label': hidden ? 'Show project' : 'Hide project',
+          title: hidden ? 'Show project' : 'Hide project',
+        },
+      });
+      setIcon(visibility, hidden ? 'eye' : 'eye-off');
+      visibility.addEventListener('click', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        void this.setProjectHidden(projectFile, !hidden);
+      });
+    }
+    return projectSection.createDiv({ cls: boardClass });
+  }
+
+  private renderPlannerTaskCard(
+    entries: HTMLElement,
+    entry: BasesEntry,
+    currentTarget: string | null,
+    currentProjectGroup: string,
+    currentProjectTarget: string | null,
+    columns: Array<{ name: string; target: string | null }>,
+    groupProperty: BasesPropertyId,
+    groupAssignment: unknown,
+  ): void {
+    const frontmatter = this.app.metadataCache.getFileCache(entry.file)?.frontmatter;
+    const points = estimate(frontmatter);
+    const card = entries.createDiv({
+      cls: 'sprint-planner-card',
+      attr: {
+        draggable: 'true',
+        'data-task-path': entry.file.path,
+        'data-estimate': String(points),
+        'data-done': String(isDone(frontmatter)),
+        'data-project-group': currentProjectGroup,
+        'data-project-target': currentProjectTarget ?? '',
+        'data-sprint-target': currentTarget ?? '',
+        'aria-label': `${entry.file.basename}. Drag to another project or use the Sprint selector to reassign.`,
+      },
+    });
+    const title = card.createEl('button', {
+      cls: 'sprint-planner-card-title',
+      text: entry.file.basename,
+      attr: { type: 'button' },
+    });
+    let dragged = false;
+    title.addEventListener('click', (event) => {
+      if (dragged) {
+        event.preventDefault();
+        return;
+      }
+      void this.app.workspace.openLinkText(entry.file.path, '', false);
+    });
+
+    const meta = card.createDiv({ cls: 'sprint-planner-card-meta' });
+    meta.createSpan({
+      cls: `sprint-planner-state sprint-planner-state-${taskState(frontmatter).toLowerCase().replace(' ', '-')}`,
+      text: taskState(frontmatter),
+    });
+    const configuredProperties = getCardTaskProperties(this.config.getOrder(), []);
+    for (const propertyId of configuredProperties) {
+      const property = String(propertyId).replace(/^note\./, '');
+      if (property === 'project' || property === 'sprint') continue;
+      const value = getFrontmatterProperty(frontmatter, property);
+      if (property === 'estimate') {
+        if (points <= 0) continue;
+        meta.createSpan({
+          cls: `sprint-bases-entry-points sprint-bases-entry-points-${getEstimateTone(points)}`,
+          text: `${points} pt`,
+        });
+        continue;
+      }
+      const displayValue = formatTaskCardProperty(property, value);
+      if (!displayValue) continue;
+      const badge = meta.createSpan({ cls: 'sprint-bases-entry-property' });
+      if (property === 'due' || property === 'due date') {
+        const icon = badge.createSpan({ cls: 'sprint-bases-entry-property-icon' });
+        setIcon(icon, 'calendar-days');
+        badge.createSpan({ text: displayValue });
+      } else {
+        badge.createSpan({ text: `${this.config.getDisplayName(propertyId)}: ${displayValue}` });
+      }
+    }
+
+    const sprintSelector = card.createEl('select', {
+      cls: 'sprint-planner-sprint-select',
+      attr: { 'aria-label': `Sprint for ${entry.file.basename}`, draggable: 'false' },
+    });
+    for (const column of columns) {
+      sprintSelector.createEl('option', { text: column.name, value: column.target ?? '' });
+    }
+    sprintSelector.value = currentTarget ?? '';
+    sprintSelector.addEventListener('pointerdown', (event) => { event.stopPropagation(); });
+    sprintSelector.addEventListener('change', () => {
+      const target = sprintSelector.value || null;
+      const targetEntries = this.findPlannerEntries(target, card.dataset.projectGroup || 'No project');
+      if (!targetEntries) return;
+      void this.movePlannerTask(
+        entry.file.path,
+        target,
+        card.dataset.projectTarget || null,
+        card.dataset.projectGroup || 'No project',
+        targetEntries,
+        card,
+        groupProperty,
+        groupAssignment,
+      );
+    });
+
+    card.addEventListener('dragstart', (event) => {
+      if (event.target === sprintSelector) {
+        event.preventDefault();
+        return;
+      }
+      dragged = true;
+      this.draggedTaskPath = entry.file.path;
+      this.draggedTaskEl = card;
+      this.draggedProjectGroup = currentProjectGroup;
+      card.classList.add('is-dragging');
+      if (event.dataTransfer) {
+        event.dataTransfer.effectAllowed = 'move';
+        event.dataTransfer.setData(TASK_DRAG_TYPE, entry.file.path);
+        event.dataTransfer.setData('text/plain', entry.file.path);
+      }
+    });
+    card.addEventListener('dragend', () => {
+      this.clearDragState();
+      card.ownerDocument.defaultView?.setTimeout(() => { dragged = false; }, 0);
+    });
+  }
+
+  private registerPlannerDropTarget(
+    section: HTMLElement,
+    entries: HTMLElement,
+    sprintTarget: string | null,
+    projectGroup: string,
+    projectTarget: string | null,
+    groupProperty: BasesPropertyId,
+    groupAssignment: unknown,
+  ): void {
+    section.addEventListener('dragover', (event) => {
+      if (!this.draggedTaskPath) return;
+      event.preventDefault();
+      if (event.dataTransfer) event.dataTransfer.dropEffect = 'move';
+      section.classList.add('is-drop-target');
+    });
+    section.addEventListener('dragleave', (event) => {
+      const nextTarget = event.relatedTarget;
+      const NodeConstructor = section.ownerDocument.defaultView?.Node;
+      if (!NodeConstructor || !(nextTarget instanceof NodeConstructor) || !section.contains(nextTarget)) {
+        section.classList.remove('is-drop-target');
+      }
+    });
+    section.addEventListener('drop', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      section.classList.remove('is-drop-target');
+      const path = event.dataTransfer?.getData(TASK_DRAG_TYPE) || this.draggedTaskPath;
+      if (!path) return;
+      void this.movePlannerTask(
+        path,
+        sprintTarget,
+        groupProperty === 'note.project'
+          ? projectTarget
+          : this.draggedTaskEl?.dataset.projectTarget || null,
+        projectGroup,
+        entries,
+        undefined,
+        groupProperty,
+        groupAssignment,
+      );
+    });
+  }
+
+  private findPlannerEntries(
+    sprintTarget: string | null,
+    projectGroup: string,
+  ): HTMLElement | null {
+    const target = sprintTarget ?? '';
+    const sections = this.containerEl.querySelectorAll<HTMLElement>('.sprint-planner-column');
+    const section = [...sections].find((candidate) => (
+      candidate.dataset.sprintTarget === target
+      && candidate.dataset.projectGroup === projectGroup
+    ));
+    return section?.querySelector<HTMLElement>('.sprint-planner-entries') ?? null;
+  }
+
+  private async movePlannerTask(
+    path: string,
+    sprintTarget: string | null,
+    projectTarget: string | null,
+    projectGroup: string,
+    targetEntries: HTMLElement,
+    selectedCard?: HTMLElement,
+    groupProperty: BasesPropertyId = 'note.project',
+    groupAssignment: unknown = null,
+  ): Promise<void> {
+    const file = this.app.vault.getFileByPath(path);
+    if (!file) {
+      this.clearDragState();
+      new Notice(`Unable to plan task: ${path} was not found.`);
+      return;
+    }
+    const frontmatter = this.app.metadataCache.getFileCache(file)?.frontmatter;
+    const hasSprint = Array.isArray(frontmatter?.sprint)
+      ? frontmatter.sprint.length > 0
+      : typeof frontmatter?.sprint === 'string' && frontmatter.sprint.trim().length > 0;
+    const hasProject = Array.isArray(frontmatter?.project)
+      ? frontmatter.project.length > 0
+      : typeof frontmatter?.project === 'string' && frontmatter.project.trim().length > 0;
+    const sameSprint = sprintTarget
+      ? taskReferencesSprint(frontmatter?.sprint, sprintTarget)
+      : !hasSprint;
+    const sameProject = projectTarget
+      ? taskReferencesProject(frontmatter?.project, projectTarget)
+      : !hasProject;
+    const sameGroup = taskGroupAssignmentKey(
+      getTaskGroupValue(frontmatter, groupProperty).assignment,
+    ) === taskGroupAssignmentKey(groupAssignment);
+    if (sameSprint && sameProject && sameGroup) {
+      this.clearDragState();
+      return;
+    }
+
+    const card = selectedCard ?? this.draggedTaskEl;
+    const originalParent = card?.parentElement ?? null;
+    const originalNextSibling = card?.nextSibling ?? null;
+    const originalTarget = originalParent?.closest<HTMLElement>('.sprint-planner-column')?.dataset.sprintTarget ?? '';
+    const originalProjectGroup = card?.dataset.projectGroup ?? 'No project';
+    const originalProjectTarget = card?.dataset.projectTarget ?? '';
+    const originalProjectSection = originalParent?.closest<HTMLElement>('.sprint-bases-project') ?? null;
+    const targetProjectSection = targetEntries.closest<HTMLElement>('.sprint-bases-project');
+    const sprintSelector = card?.querySelector<HTMLSelectElement>('.sprint-planner-sprint-select');
+    if (card) {
+      targetEntries.querySelector('.sprint-bases-empty')?.remove();
+      targetEntries.append(card);
+      card.dataset.projectGroup = projectGroup;
+      card.dataset.projectTarget = projectTarget ?? '';
+      card.dataset.sprintTarget = sprintTarget ?? '';
+      card.classList.remove('is-dragging');
+      card.classList.add('is-updating');
+      card.setAttribute('aria-busy', 'true');
+      card.setAttribute('draggable', 'false');
+      if (sprintSelector) sprintSelector.value = sprintTarget ?? '';
+      if (sprintSelector) sprintSelector.disabled = true;
+      this.updatePlannerColumnMetrics(originalParent?.closest<HTMLElement>('.sprint-planner-column') ?? null);
+      this.updatePlannerColumnMetrics(targetEntries.closest<HTMLElement>('.sprint-planner-column'));
+      this.updatePlannerProjectCount(originalProjectSection);
+      this.updatePlannerProjectCount(targetProjectSection);
+    }
+
+    try {
+      await this.app.fileManager.processFrontMatter(file, (properties) => {
+        applyPlannerTaskDestination(
+          properties as Record<string, unknown>,
+          sprintTarget,
+          projectTarget,
+          !sameProject,
+        );
+        if (groupProperty !== 'note.project') {
+          applyTaskGroupAssignment(
+            properties as Record<string, unknown>,
+            groupProperty,
+            groupAssignment,
+          );
+        }
+      });
+      this.ensurePlannerColumnEmptyState(originalParent);
+    } catch (error) {
+      if (card && originalParent) {
+        originalParent.querySelector('.sprint-bases-empty')?.remove();
+        originalParent.insertBefore(card, originalNextSibling);
+        card.dataset.projectGroup = originalProjectGroup;
+        card.dataset.projectTarget = originalProjectTarget;
+        card.dataset.sprintTarget = originalTarget;
+        this.ensurePlannerColumnEmptyState(targetEntries);
+        if (sprintSelector) sprintSelector.value = originalTarget;
+        this.updatePlannerColumnMetrics(originalParent.closest<HTMLElement>('.sprint-planner-column'));
+        this.updatePlannerColumnMetrics(targetEntries.closest<HTMLElement>('.sprint-planner-column'));
+        this.updatePlannerProjectCount(originalProjectSection);
+        this.updatePlannerProjectCount(targetProjectSection);
+      }
+      const message = error instanceof Error ? error.message : String(error);
+      new Notice(`Unable to plan task: ${message}`);
+    } finally {
+      card?.classList.remove('is-updating');
+      card?.removeAttribute('aria-busy');
+      card?.setAttribute('draggable', 'true');
+      if (sprintSelector) sprintSelector.disabled = false;
+      this.clearDragState();
+    }
+  }
+
+  private ensurePlannerColumnEmptyState(entries: HTMLElement | null): void {
+    if (!entries || entries.querySelector('.sprint-planner-card')) return;
+    if (!entries.querySelector('.sprint-bases-empty')) {
+      entries.createDiv({ cls: 'sprint-bases-empty', text: 'No tasks' });
+    }
+  }
+
+  private updatePlannerColumnMetrics(section: HTMLElement | null): void {
+    if (!section) return;
+    const cards = [...section.querySelectorAll<HTMLElement>('.sprint-planner-card')];
+    const points = cards.reduce((total, card) => total + Number(card.dataset.estimate ?? 0), 0);
+    const completed = cards.filter((card) => card.dataset.done === 'true').length;
+    const taskLabel = cards.length === 1 ? 'task' : 'tasks';
+    const done = completed > 0 ? ` · ${completed} done` : '';
+    const metrics = section.querySelector<HTMLElement>('.sprint-planner-column-metrics');
+    if (metrics) metrics.setText(`${cards.length} ${taskLabel} · ${points} pt${done}`);
+  }
+
+  private updatePlannerProjectCount(section: HTMLElement | null): void {
+    if (!section) return;
+    this.updateProjectProgress(section, '.sprint-planner-card');
+  }
+
+  private updateProjectProgress(section: HTMLElement | null, cardSelector: string): void {
+    if (!section) return;
+    const cards = [...section.querySelectorAll<HTMLElement>(cardSelector)];
+    const completed = cards.filter((card) => card.dataset.done === 'true').length;
+    const progress = formatTaskCompletion(completed, cards.length);
+    const counter = section.querySelector<HTMLElement>('.sprint-bases-project-count');
+    counter?.setText(progress);
+    counter?.setAttribute('aria-label', `${section.dataset.projectGroup ?? 'Project'}: ${progress}`);
+  }
+
   private async setProjectHidden(file: TFile, hidden: boolean): Promise<void> {
     try {
       await this.app.fileManager.processFrontMatter(file, (frontmatter) => {
@@ -440,6 +1339,8 @@ class SprintBasesView extends BasesView {
     project: string,
     projectTarget: string | null,
     profile: SprintSettings['profiles'][number] | undefined,
+    groupProperty: BasesPropertyId = 'note.project',
+    groupAssignment: unknown = null,
   ): void {
     if (!profile?.rootFolder) return;
     const button = entries.createEl('button', {
@@ -456,27 +1357,11 @@ class SprintBasesView extends BasesView {
       cls: 'sprint-bases-new-task-name',
       attr: { type: 'text', placeholder: 'Task name', 'aria-label': 'Task name' },
     });
-    const propertyInputs = new Map<string, HTMLInputElement>();
-    const configuredProperties = [1, 2, 3]
+    const fields = form.createDiv({ cls: 'sprint-bases-new-task-fields' });
+    let propertyInputs = new Map<string, NewTaskPropertyInput>();
+    const legacyProperties = [1, 2, 3]
       .map((position) => this.config.getAsPropertyId(`newTaskProperty${position}`))
       .filter((property): property is BasesPropertyId => property !== null);
-    for (const property of getEditableTaskProperties(configuredProperties)) {
-      const propertyId: `note.${string}` = `note.${property}`;
-      const field = form.createDiv({ cls: 'sprint-bases-new-task-field' });
-      const fieldIcon = field.createSpan({ cls: 'sprint-bases-new-task-field-icon' });
-      setIcon(fieldIcon, property === 'due' || property === 'due date' ? 'calendar' : 'circle-gauge');
-      const input = field.createEl('input', {
-        attr: {
-          type: property === 'due' || property === 'due date'
-            ? 'date'
-            : property === 'estimate' || property === 'priority' ? 'number' : 'text',
-          placeholder: this.config.getDisplayName(propertyId),
-          'aria-label': this.config.getDisplayName(propertyId),
-          ...(property === 'estimate' || property === 'priority' ? { min: '0', step: '1' } : {}),
-        },
-      });
-      propertyInputs.set(property, input);
-    }
     const actions = form.createDiv({ cls: 'sprint-bases-new-task-actions' });
     const cancel = actions.createEl('button', { text: 'Cancel', attr: { type: 'button' } });
     const create = actions.createEl('button', {
@@ -497,6 +1382,20 @@ class SprintBasesView extends BasesView {
       form.hidden = false;
       button.setAttribute('aria-expanded', 'true');
       nameInput.focus();
+      create.disabled = true;
+      void this.getTaskPropertyTypes().then((propertyTypes) => {
+        if (form.hidden) return;
+        const nativeOrder = this.config.getOrder();
+        const properties = getEditableTaskProperties(
+          nativeOrder.length > 0 ? nativeOrder : undefined,
+          legacyProperties,
+          this.config.get('sprintScope'),
+        );
+        propertyInputs = this.renderNewTaskFields(fields, properties, propertyTypes, profile.rootFolder);
+        create.disabled = false;
+      }).catch(() => {
+        create.disabled = false;
+      });
     });
     cancel.addEventListener('click', close);
     form.addEventListener('keydown', (event) => {
@@ -516,6 +1415,8 @@ class SprintBasesView extends BasesView {
         project === 'No project' ? null : projectTarget,
         profile.rootFolder,
         propertyInputs,
+        groupProperty,
+        groupAssignment,
       ).then(() => close()).catch(() => undefined).finally(() => { create.disabled = false; });
     });
   }
@@ -525,7 +1426,9 @@ class SprintBasesView extends BasesView {
     state: TaskBoardState,
     projectTarget: string | null,
     rootFolder: string,
-    propertyInputs: Map<string, HTMLInputElement>,
+    propertyInputs: Map<string, NewTaskPropertyInput>,
+    groupProperty: BasesPropertyId,
+    groupAssignment: unknown,
   ): Promise<void> {
     const folder = normalizePath(`${rootFolder}/Tasks`).replace(/^\/+/, '');
     const safeName = name.replace(/[\\/:*?"<>|]/g, '-').replace(/\.+$/g, '').trim();
@@ -544,11 +1447,13 @@ class SprintBasesView extends BasesView {
     try {
       file = await this.app.vault.create(path, '');
       const sprint = this.getSprintForNewTask(rootFolder);
-      const properties: Record<string, string | number | null> = {};
-      for (const [property, input] of propertyInputs) {
-        const value = input.value.trim();
-        if (!value) continue;
-        properties[property] = input.type === 'number' ? Number(value) : value;
+      const properties: Record<string, unknown> = {};
+      for (const [property, field] of propertyInputs) {
+        const rawValue = field.input instanceof HTMLInputElement && field.input.type === 'checkbox'
+          ? field.input.checked
+          : field.input.value;
+        const value = parseTaskPropertyValue(field.type, rawValue);
+        if (value !== undefined) properties[property] = value;
       }
       await this.app.fileManager.processFrontMatter(file, (frontmatter) => {
         applyNewTaskFrontmatter(
@@ -558,6 +1463,13 @@ class SprintBasesView extends BasesView {
           sprint,
           properties,
         );
+        if (groupProperty !== 'note.project') {
+          applyTaskGroupAssignment(
+            frontmatter as Record<string, unknown>,
+            groupProperty,
+            groupAssignment,
+          );
+        }
       });
       new Notice(`Task created: ${file.basename}`);
     } catch (error) {
@@ -569,11 +1481,81 @@ class SprintBasesView extends BasesView {
   }
 
   private getSprintForNewTask(rootFolder: string): string | null {
-    const configuredScope = this.config.get('sprintScope');
-    const scope = configuredScope === 'next' ? 'next' : 'current';
+    const scope = getNewTaskSprintScope(this.config.get('sprintScope'));
+    if (!scope) return null;
     const sprint = this.filesIn(`${rootFolder.replace(/^\/+|\/+$/g, '')}/Sprints`)
       .find((file) => this.app.metadataCache.getFileCache(file)?.frontmatter?.['sprint status'] === scope);
     return sprint?.path.replace(/\.md$/, '') ?? null;
+  }
+
+  private async getTaskPropertyTypes(): Promise<Record<string, unknown>> {
+    const path = normalizePath(`${this.app.vault.configDir}/types.json`);
+    try {
+      if (!await this.app.vault.adapter.exists(path)) return {};
+      const parsed: unknown = JSON.parse(await this.app.vault.adapter.read(path));
+      if (typeof parsed !== 'object' || parsed === null) return {};
+      const types = (parsed as Record<string, unknown>).types;
+      return typeof types === 'object' && types !== null
+        ? types as Record<string, unknown>
+        : {};
+    } catch {
+      return {};
+    }
+  }
+
+  private renderNewTaskFields(
+    container: HTMLElement,
+    properties: string[],
+    propertyTypes: Record<string, unknown>,
+    rootFolder: string,
+  ): Map<string, NewTaskPropertyInput> {
+    container.empty();
+    const inputs = new Map<string, NewTaskPropertyInput>();
+    for (const property of properties) {
+      const propertyId: `note.${string}` = `note.${property}`;
+      const type = resolveTaskPropertyType(property, propertyTypes[property]);
+      const field = container.createDiv({ cls: 'sprint-bases-new-task-field' });
+      const fieldIcon = field.createSpan({ cls: 'sprint-bases-new-task-field-icon' });
+      setIcon(fieldIcon, type === 'date' || type === 'datetime' ? 'calendar' : type === 'checkbox' ? 'check-square' : type === 'link' ? 'link' : 'circle-gauge');
+      const label = this.config.getDisplayName(propertyId);
+      let input: HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement;
+      if (type === 'checkbox') {
+        const checkboxLabel = field.createEl('label', { cls: 'sprint-bases-new-task-checkbox' });
+        input = checkboxLabel.createEl('input', {
+          attr: { type: 'checkbox', 'aria-label': label },
+        });
+        checkboxLabel.createSpan({ text: label });
+      } else if (type === 'link' && property === 'sprint') {
+        const select = field.createEl('select', { attr: { 'aria-label': label } });
+        select.createEl('option', { text: 'No sprint', value: '' });
+        for (const sprint of this.filesIn(`${rootFolder.replace(/^\/+|\/+$/g, '')}/Sprints`)) {
+          select.createEl('option', {
+            text: sprint.basename,
+            value: sprint.path.replace(/\.md$/, ''),
+          });
+        }
+        input = select;
+      } else if (type === 'list' || type === 'tags') {
+        input = field.createEl('textarea', {
+          attr: {
+            rows: '2',
+            placeholder: type === 'tags' ? `${label} (comma separated)` : `${label} (comma separated)`,
+            'aria-label': label,
+          },
+        });
+      } else {
+        input = field.createEl('input', {
+          attr: {
+            type: type === 'date' ? 'date' : type === 'datetime' ? 'datetime-local' : type === 'number' ? 'number' : 'text',
+            placeholder: label,
+            'aria-label': label,
+            ...(type === 'number' ? { step: 'any' } : {}),
+          },
+        });
+      }
+      inputs.set(property, { type, input });
+    }
+    return inputs;
   }
 
   private getReferenceTarget(value: unknown): string | null {
@@ -583,15 +1565,44 @@ class SprintBasesView extends BasesView {
     return reference.trim().replace(/^\[\[/, '').replace(/\]\]$/, '').split('|')[0]?.trim() || null;
   }
 
+  private getReferenceFile(value: unknown): TFile | null {
+    const target = this.getReferenceTarget(value);
+    return target ? this.app.vault.getFileByPath(`${target}.md`) : null;
+  }
+
   private renderSprintOverview(content: HTMLElement, rootFolder: string): void {
+    content.addClass('sprint-overview');
     const root = rootFolder.replace(/^\/+|\/+$/g, '');
     const tasks = this.filesIn(`${root}/Tasks`);
     let rendered = 0;
-    for (const group of this.data.groupedData) {
+    const statusOrder = new Map([
+      ['last', 0],
+      ['current', 1],
+      ['next', 2],
+      ['future', 3],
+    ]);
+    const groups = [...this.data.groupedData].sort((left, right) => {
+      const leftStatus = left.hasKey() ? String(left.key ?? '').toLowerCase() : '';
+      const rightStatus = right.hasKey() ? String(right.key ?? '').toLowerCase() : '';
+      return (statusOrder.get(leftStatus) ?? 4) - (statusOrder.get(rightStatus) ?? 4);
+    });
+    for (const group of groups) {
       const section = content.createDiv({ cls: 'sprint-overview-group' });
       section.createEl('h4', { text: group.hasKey() ? group.key?.toString() : 'Sprints' });
       const cards = section.createDiv({ cls: 'sprint-overview-cards' });
-      for (const entry of group.entries) {
+      const entries = [...group.entries].sort((left, right) => {
+        const leftFrontmatter = this.app.metadataCache.getFileCache(left.file)?.frontmatter;
+        const rightFrontmatter = this.app.metadataCache.getFileCache(right.file)?.frontmatter;
+        const leftNumber = Number(leftFrontmatter?.['sprint number'] ?? Number.POSITIVE_INFINITY);
+        const rightNumber = Number(rightFrontmatter?.['sprint number'] ?? Number.POSITIVE_INFINITY);
+        return leftNumber - rightNumber || left.file.basename.localeCompare(right.file.basename);
+      });
+      const cardCount = Math.max(entries.length, 1);
+      section.setCssProps({
+        '--sprint-overview-card-count': String(cardCount),
+        '--sprint-overview-group-width': `${cardCount * 220 + (cardCount - 1) * 12}px`,
+      });
+      for (const entry of entries) {
         rendered += 1;
         const frontmatter = this.app.metadataCache.getFileCache(entry.file)?.frontmatter;
         const sprintTasks = tasks.filter((task) => sprintReferences(
@@ -634,6 +1645,7 @@ class SprintBasesView extends BasesView {
         });
       }
     }
+    this.renderOverviewAddSprintAction(content, root);
     if (rendered === 0) {
       content.createDiv({ cls: 'sprint-bases-empty', text: 'No sprints match this view.' });
     }
@@ -641,6 +1653,63 @@ class SprintBasesView extends BasesView {
 
   private filesIn(folder: string): TFile[] {
     return markdownFilesInFolder(this.app, folder);
+  }
+
+  private renderOverviewAddSprintAction(parent: HTMLElement, root: string): void {
+    if (!this.generateFutureSprint || !root) return;
+    const section = parent.createDiv({ cls: 'sprint-overview-group sprint-overview-add-group' });
+    section.createEl('h4', { text: '\u00a0', attr: { 'aria-hidden': 'true' } });
+    this.renderAddSprintButton(
+      section,
+      root,
+      'sprint-overview-add-card',
+      'sprint-add-sprint-button sprint-overview-add-button',
+      true,
+    );
+  }
+
+  private renderAddSprintButton(
+    parent: HTMLElement,
+    root: string,
+    className: string,
+    buttonClassName: string,
+    iconOnly = false,
+  ): void {
+    const generate = this.generateFutureSprint;
+    if (!generate || !root) return;
+    const sprintFiles = this.filesIn(`${root}/Sprints`);
+    const nextNumber = Math.max(0, ...sprintFiles.map((file) => {
+      const value = getFrontmatterProperty(
+        this.app.metadataCache.getFileCache(file)?.frontmatter,
+        'sprint number',
+      );
+      return typeof value === 'number' && Number.isFinite(value) ? value : 0;
+    })) + 1;
+    const actions = parent.createDiv({ cls: className });
+    const button = actions.createEl('button', {
+      cls: buttonClassName,
+      attr: {
+        type: 'button',
+        'aria-label': `Add Sprint ${nextNumber}`,
+        title: `Add Sprint ${nextNumber}`,
+      },
+    });
+    setIcon(button.createSpan({ cls: 'sprint-add-sprint-icon' }), 'plus');
+    if (!iconOnly) button.createSpan({ text: `Add Sprint ${nextNumber}` });
+    button.addEventListener('click', () => {
+      void (async (): Promise<void> => {
+        button.disabled = true;
+        try {
+          const result = await generate();
+          new Notice(`${result.note.basename} created.`);
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          new Notice(`Unable to add sprint: ${message}`);
+        } finally {
+          button.disabled = false;
+        }
+      })();
+    });
   }
 
   private renderTaskCard(entries: HTMLElement, entry: BasesEntry, project: string): void {
@@ -651,6 +1720,8 @@ class SprintBasesView extends BasesView {
         type: 'button',
         draggable: 'true',
         'data-task-path': entry.file.path,
+        'data-done': String(isDone(frontmatter)),
+        'data-project-group': project,
         'aria-label': `${entry.file.basename}. Drag to change task state.`,
       },
     });
@@ -678,13 +1749,19 @@ class SprintBasesView extends BasesView {
         renderedMetadata = true;
         continue;
       }
-      const displayValue = this.formatCardProperty(value);
+      const displayValue = formatTaskCardProperty(property, value);
       if (!displayValue) continue;
       const label = this.config.getDisplayName(propertyId);
-      meta.createSpan({
-        cls: 'sprint-bases-entry-property',
-        text: property === 'sprint' ? displayValue : `${label}: ${displayValue}`,
-      });
+      const badge = meta.createSpan({ cls: 'sprint-bases-entry-property' });
+      if (property === 'due' || property === 'due date') {
+        const icon = badge.createSpan({ cls: 'sprint-bases-entry-property-icon' });
+        setIcon(icon, 'calendar-days');
+        badge.createSpan({ text: displayValue });
+      } else {
+        badge.createSpan({
+          text: property === 'sprint' ? displayValue : `${label}: ${displayValue}`,
+        });
+      }
       renderedMetadata = true;
     }
     if (!renderedMetadata) meta.remove();
@@ -716,27 +1793,16 @@ class SprintBasesView extends BasesView {
     });
   }
 
-  private formatCardProperty(value: unknown): string {
-    if (Array.isArray(value)) {
-      return value.map((entry) => this.formatCardProperty(entry)).filter(Boolean).join(', ');
-    }
-    if (typeof value === 'string') {
-      const normalized = value.trim().replace(/^\[\[/, '').replace(/\]\]$/, '');
-      const [target = '', alias] = normalized.split('|');
-      return alias?.trim() || target.split('/').at(-1)?.trim() || '';
-    }
-    if (typeof value === 'number' || typeof value === 'boolean') return String(value);
-    return '';
-  }
-
   private registerDropTarget(
     section: HTMLElement,
     entries: HTMLElement,
     state: TaskBoardState,
     project: string,
+    groupProperty: BasesPropertyId,
+    groupAssignment: unknown,
   ): void {
     section.addEventListener('dragover', (event) => {
-      if (!this.draggedTaskPath || this.draggedProjectGroup !== project) return;
+      if (!this.draggedTaskPath) return;
       event.preventDefault();
       if (event.dataTransfer) event.dataTransfer.dropEffect = 'move';
       section.classList.add('is-drop-target');
@@ -753,8 +1819,8 @@ class SprintBasesView extends BasesView {
       event.stopPropagation();
       section.classList.remove('is-drop-target');
       const path = event.dataTransfer?.getData(TASK_DRAG_TYPE) || this.draggedTaskPath;
-      if (!path || this.draggedProjectGroup !== project) return;
-      void this.moveTask(path, state, entries);
+      if (!path) return;
+      void this.moveTask(path, state, entries, project, groupProperty, groupAssignment);
     });
   }
 
@@ -762,6 +1828,9 @@ class SprintBasesView extends BasesView {
     path: string,
     state: TaskBoardState,
     target: HTMLElement,
+    group: string,
+    groupProperty: BasesPropertyId,
+    groupAssignment: unknown,
   ): Promise<void> {
     const file = this.app.vault.getFileByPath(path);
     if (!file) {
@@ -771,7 +1840,10 @@ class SprintBasesView extends BasesView {
     }
 
     const currentFrontmatter = this.app.metadataCache.getFileCache(file)?.frontmatter;
-    if (taskState(currentFrontmatter) === state) {
+    const currentGroupValue = getTaskGroupValue(currentFrontmatter, groupProperty);
+    const currentGroup = currentGroupValue.label;
+    if (taskState(currentFrontmatter) === state
+      && taskGroupAssignmentKey(currentGroupValue.assignment) === taskGroupAssignmentKey(groupAssignment)) {
       this.clearDragState();
       return;
     }
@@ -779,24 +1851,40 @@ class SprintBasesView extends BasesView {
     const card = this.draggedTaskEl;
     const originalParent = card?.parentElement ?? null;
     const originalNextSibling = card?.nextSibling ?? null;
+    const originalProjectSection = originalParent?.closest<HTMLElement>('.sprint-bases-project') ?? null;
+    const targetProjectSection = target.closest<HTMLElement>('.sprint-bases-project');
+    const originalGroup = card?.dataset.projectGroup ?? currentGroup;
     if (card) {
       target.querySelector('.sprint-bases-empty')?.remove();
       target.append(card);
+      card.dataset.projectGroup = group;
       card.classList.remove('is-dragging');
       card.classList.add('is-updating');
       card.setAttribute('aria-busy', 'true');
+      card.dataset.done = String(state === 'Done');
       this.ensureColumnEmptyState(originalParent);
+      this.updateProjectProgress(originalProjectSection, '.sprint-bases-entry');
+      this.updateProjectProgress(targetProjectSection, '.sprint-bases-entry');
     }
 
     try {
       await this.app.fileManager.processFrontMatter(file, (frontmatter) => {
         applyTaskBoardState(frontmatter as Record<string, unknown>, state);
+        applyTaskGroupAssignment(
+          frontmatter as Record<string, unknown>,
+          groupProperty,
+          groupAssignment,
+        );
       });
     } catch (error) {
       if (card && originalParent) {
         originalParent.querySelector('.sprint-bases-empty')?.remove();
         originalParent.insertBefore(card, originalNextSibling);
+        card.dataset.projectGroup = originalGroup;
         this.ensureColumnEmptyState(target);
+        card.dataset.done = String(isDone(currentFrontmatter));
+        this.updateProjectProgress(originalProjectSection, '.sprint-bases-entry');
+        this.updateProjectProgress(targetProjectSection, '.sprint-bases-entry');
       }
       const message = error instanceof Error ? error.message : String(error);
       new Notice(`Unable to move task: ${message}`);
@@ -929,14 +2017,19 @@ class SprintVelocityView extends BasesView {
 
 export function createSprintBasesViewRegistration(
   getSettings: () => SprintSettings,
+  generateFutureSprint?: () => Promise<FutureSprintGenerationResult>,
 ): BasesViewRegistration {
   return {
     name: 'Sprint',
     icon: 'calendar-range',
     factory: (controller, containerEl) => (
-      new SprintBasesView(controller, containerEl, getSettings)
+      new SprintBasesView(controller, containerEl, getSettings, generateFutureSprint)
     ),
-    options: () => getSprintBasesOptions(getSettings()),
+    options: (config) => getSprintBasesOptions(
+      getSettings(),
+      config.get('layout'),
+      config.get('sprintScope'),
+    ),
   };
 }
 

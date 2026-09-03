@@ -2,6 +2,13 @@ import type { App, TFile } from 'obsidian';
 import { normalizePath, parseYaml, stringifyYaml } from 'obsidian';
 
 import { resolveSprintProfile } from '../domain/SprintSettings';
+import {
+  addDays,
+  getCurrentSprintStart,
+  getLocalDate,
+  getSprintEnd,
+  getWeekStart,
+} from '../domain/SprintSchedule';
 import type { SprintProfile, SprintSettings } from '../domain/types';
 import { SPRINT_BASES_VIEW_TYPE, SPRINT_VELOCITY_VIEW_TYPE } from './SprintBasesView';
 
@@ -143,6 +150,11 @@ function sprintInstructions(settings: SprintSettings, profiles = settings.profil
     '- Store `project` and `sprint` as lists of Obsidian links, matching the conventions in existing generated task notes.',
     '- For broad or destructive changes, summarize the proposed file changes and ask for confirmation first.',
     '- Assign tasks to existing generated sprint notes by updating the `sprint` property.',
+    '- Treat tasks without a Sprint assignment as backlog items. Use the Sprint planner to move tasks between backlog and generated sprint notes while preserving task state.',
+    '- Sprint board views can group tasks by a safe editable note property. Moving a card between groups updates that property; moving it between state columns updates the state booleans.',
+    '- Respect each Base view\'s visible property order when creating or summarizing tasks. Current and Next sprint views assign their sprint automatically; the full Sprint board does not.',
+    '- When the user needs another planning horizon, use Sprint\'s Generate future sprint action. Do not manually invent dates or reuse sprint numbers.',
+    '- If the configured workspace is missing, stop and ask the user to locate it, create a replacement, or defer recovery. Do not silently recreate a moved folder.',
     '- Mark tasks complete only when the user says the work is complete or available evidence clearly establishes completion.',
     '- Never claim a task, sprint, project, Base, or setting was changed unless the corresponding vault write succeeded.',
     '',
@@ -191,6 +203,7 @@ function sprintOverviewView(profileId: string): string[] {
     '        - note["sprint status"] == "current"',
     '        - note["sprint status"] == "next"',
     '        - note["sprint status"] == "last"',
+    '        - note["sprint status"] == "future"',
     '    groupBy:',
     '      property: sprint status',
     '      direction: ASC',
@@ -204,7 +217,7 @@ function sprintOverviewView(profileId: string): string[] {
 function sprintView(
   profileId: string,
   name: string,
-  layout: 'board' | 'list' | 'kanban',
+  layout: 'board' | 'list' | 'kanban' | 'planner',
   showCompleted: boolean,
   sprintScope?: SprintTaskScope,
 ): string[] {
@@ -222,14 +235,19 @@ function sprintView(
     ] : []),
     '    order:',
     '      - file.name',
+    ...(layout === 'planner' ? ['      - note.project'] : []),
     '      - note.estimate',
-    ...(!sprintScope ? ['      - note.sprint'] : []),
+    '      - note.due',
+    ...(!sprintScope && layout !== 'planner' ? ['      - note.sprint'] : []),
     `    sprintProfile: ${yamlString(profileId)}`,
     ...(sprintScope ? [`    sprintScope: ${yamlString(sprintScope)}`] : []),
     `    layout: ${yamlString(layout)}`,
     `    showCompleted: ${showCompleted}`,
-    '    newTaskProperty1: note.estimate',
-    '    newTaskProperty2: note.due',
+    ...(layout === 'planner' ? ['    showPastSprints: false'] : []),
+    '    groupByProperty: note.project',
+    '    groupOrder: alphabetical',
+    '    groupOrderProperty: note.priority',
+    '    groupOrderDirection: asc',
   ];
 }
 
@@ -271,6 +289,7 @@ function tasksBaseContent(
     `${root}/Tasks`,
     taskBaseProperties(),
     [
+      ...sprintView(resolved.id, 'Sprint planner', 'planner', true),
       ...sprintView(resolved.id, 'Sprint board', 'kanban', true),
       ...tableView('Tasks', [
         'file.name',
@@ -365,6 +384,22 @@ export function migrateTasksBaseContent(content: string, profileId: string): str
       changed = true;
     }
     if (!Array.isArray(base.views)) return changed;
+    const hasPlanner = base.views.some((candidate) => (
+      asRecord(candidate)?.name === 'Sprint planner'
+    ));
+    if (!hasPlanner) {
+      base.views.push({
+        type: SPRINT_BASES_VIEW_TYPE,
+        name: 'Sprint planner',
+        filters: { and: ['note.archived != true'] },
+        order: ['file.name', 'note.project', 'note.estimate', 'note.due'],
+        sprintProfile: profileId,
+        layout: 'planner',
+        showCompleted: true,
+        showPastSprints: false,
+      });
+      changed = true;
+    }
     for (const candidate of base.views) {
       const view = asRecord(candidate);
       if (!view) continue;
@@ -375,6 +410,26 @@ export function migrateTasksBaseContent(content: string, profileId: string): str
       }
       if (view.type !== SPRINT_BASES_VIEW_TYPE || view.sprintProfile !== profileId) continue;
       changed = appendFilter(view, 'note.archived != true') || changed;
+      if (view.layout === 'planner' && view.showPastSprints === undefined) {
+        view.showPastSprints = false;
+        changed = true;
+      }
+      if (view.groupByProperty === undefined) {
+        view.groupByProperty = 'note.project';
+        changed = true;
+      }
+      if (view.groupOrder === undefined) {
+        view.groupOrder = 'alphabetical';
+        changed = true;
+      }
+      if (view.groupOrderProperty === undefined) {
+        view.groupOrderProperty = 'note.priority';
+        changed = true;
+      }
+      if (view.groupOrderDirection === undefined) {
+        view.groupOrderDirection = 'asc';
+        changed = true;
+      }
       if (!Array.isArray(view.order)) {
         const legacyCardProperties = [1, 2, 3]
           .map((position) => view[`cardProperty${position}`])
@@ -388,12 +443,18 @@ export function migrateTasksBaseContent(content: string, profileId: string): str
         )];
         changed = true;
       }
-      if (view.newTaskProperty1 === undefined) {
-        view.newTaskProperty1 = 'note.estimate';
-        changed = true;
-      }
-      if (view.newTaskProperty2 === undefined) {
-        view.newTaskProperty2 = 'note.due';
+      const oldDefaultOrder = view.name === 'Sprint board'
+        ? ['file.name', 'note.estimate', 'note.sprint']
+        : view.name === 'Current sprint' || view.name === 'Next sprint'
+          ? ['file.name', 'note.estimate']
+          : null;
+      if (
+        oldDefaultOrder
+        && Array.isArray(view.order)
+        && view.order.length === oldDefaultOrder.length
+        && view.order.every((property, index) => property === oldDefaultOrder[index])
+      ) {
+        view.order.splice(2, 0, 'note.due');
         changed = true;
       }
       for (const position of [1, 2, 3]) {
@@ -402,6 +463,24 @@ export function migrateTasksBaseContent(content: string, profileId: string): str
         delete view[key];
         changed = true;
       }
+    }
+    const plannerIndex = base.views.findIndex((candidate) => (
+      asRecord(candidate)?.name === 'Sprint planner'
+    ));
+    const firstView = asRecord(base.views[0]);
+    const firstOrder = firstView?.order;
+    const hasLegacyDefaultFirstView = firstView?.name === 'Sprint board'
+      && firstView.layout === 'kanban'
+      && Array.isArray(firstOrder)
+      && firstOrder.length === 4
+      && firstOrder.every((property, index) => (
+        property === ['file.name', 'note.estimate', 'note.due', 'note.sprint'][index]
+    ));
+    if (plannerIndex > 0 && hasLegacyDefaultFirstView) {
+      const planner: unknown = base.views[plannerIndex];
+      base.views.splice(plannerIndex, 1);
+      base.views.unshift(planner);
+      changed = true;
     }
     return changed;
   });
@@ -423,6 +502,21 @@ export function migrateProjectsBaseContent(content: string): string {
       }
     }
     return changed;
+  });
+}
+
+export function migrateSprintsBaseContent(content: string): string {
+  return migrateBaseContent(content, (base) => {
+    if (!Array.isArray(base.views)) return false;
+    const overview = base.views
+      .map(asRecord)
+      .find((view) => view?.type === SPRINT_BASES_VIEW_TYPE && view.name === 'Sprint overview');
+    const filters = overview ? asRecord(overview.filters) : null;
+    if (!filters || !Array.isArray(filters.or)) return false;
+    const futureFilter = 'note["sprint status"] == "future"';
+    if (filters.or.includes(futureFilter)) return false;
+    filters.or.push(futureFilter);
+    return true;
   });
 }
 
@@ -555,7 +649,10 @@ function definitionsForProfile(settings: SprintSettings, profile: SprintProfile)
 }
 
 export class SprintBaseGenerator {
-  constructor(private readonly app: App) {}
+  constructor(
+    private readonly app: App,
+    private readonly getToday: () => string = getLocalDate,
+  ) {}
 
   async generate(settings: SprintSettings): Promise<SprintBaseGenerationResult> {
     const result: SprintBaseGenerationResult = {
@@ -582,6 +679,9 @@ export class SprintBaseGenerator {
       ));
       await this.withContext(`Migrate Projects Base for ${profile.name || profile.id}`, () => (
         this.migrateProjectsBase(settings, profile)
+      ));
+      await this.withContext(`Migrate Sprints Base for ${profile.name || profile.id}`, () => (
+        this.migrateSprintsBase(settings, profile)
       ));
       for (const definition of definitions) {
         await this.withContext(`Create Base ${definition.path}`, async () => {
@@ -651,6 +751,14 @@ export class SprintBaseGenerator {
       ));
     }
     await this.migrateExistingBase(path, migrateProjectsBaseContent);
+  }
+
+  private async migrateSprintsBase(settings: SprintSettings, profile: SprintProfile): Promise<void> {
+    const resolved = resolveSprintProfile(settings, profile);
+    await this.migrateExistingBase(
+      basePath(resolved.sprintsBasePath),
+      migrateSprintsBaseContent,
+    );
   }
 
   private async migrateExistingBase(
@@ -779,11 +887,22 @@ export class SprintBaseGenerator {
     const resolved = resolveSprintProfile(settings, profile);
     const root = normalizeFolder(resolved.rootFolder);
     if (!root) return;
+    const today = this.getToday();
+    const durationWeeks = Math.min(8, Math.max(1, Math.round(resolved.durationWeeks)));
+    const anchorDate = resolved.anchorDate || getWeekStart(today, resolved.startDay);
+    const currentStart = getCurrentSprintStart(anchorDate, durationWeeks, today);
 
     const previousSamples = new Map(
-      this.sampleNotes(root, resolved.namingFormat, 'legacy').map((note) => [note.path, note]),
+      this.sampleNotes(root, resolved.namingFormat, 'legacy', currentStart, durationWeeks)
+        .map((note) => [note.path, note]),
     );
-    for (const note of this.sampleNotes(root, resolved.namingFormat, 'current')) {
+    for (const note of this.sampleNotes(
+      root,
+      resolved.namingFormat,
+      'current',
+      currentStart,
+      durationWeeks,
+    )) {
       const existing = this.app.vault.getFileByPath(note.path);
       if (existing) {
         const previous = previousSamples.get(note.path);
@@ -812,16 +931,21 @@ export class SprintBaseGenerator {
     root: string,
     namingFormat: string,
     version: SampleVersion,
+    currentStart: string,
+    durationWeeks: number,
   ): SampleNote[] {
     const sprintName = (number: number): string => (
       namingFormat.replaceAll('{number}', String(number)).trim() || `Sprint ${number}`
     );
     const sprintOne = sprintName(1);
     const sprintTwo = sprintName(2);
+    const nextStart = addDays(currentStart, durationWeeks * 7);
     const sprintProperty = (name: string): string[] => version === 'current'
       ? ['sprint:', `  - "[[${name}]]"`]
       : [];
-    const dueProperty = version === 'current' ? ['due:'] : [];
+    const dueProperty = (date: string): string[] => version === 'current'
+      ? [`due: ${date}`]
+      : [];
     const notes: SampleNote[] = [
       {
         path: `${root}/Projects/Welcome to Agile PM.md`,
@@ -864,7 +988,7 @@ export class SprintBaseGenerator {
         content: frontmatterNote(
           [
             'estimate: 1',
-            ...dueProperty,
+            ...dueProperty(currentStart),
             'in progress: false',
             'is done: false',
             ...(version === 'current' ? ['archived: false'] : []),
@@ -885,7 +1009,7 @@ export class SprintBaseGenerator {
         content: frontmatterNote(
           [
             'estimate: 2',
-            ...dueProperty,
+            ...dueProperty(addDays(currentStart, 1)),
             'in progress: false',
             'is done: false',
             ...(version === 'current' ? ['archived: false'] : []),
@@ -908,7 +1032,7 @@ export class SprintBaseGenerator {
         content: frontmatterNote(
           [
             'estimate: 3',
-            ...dueProperty,
+            ...dueProperty(addDays(currentStart, 2)),
             'in progress: true',
             'is done: false',
             ...(version === 'current' ? ['archived: false'] : []),
@@ -929,7 +1053,7 @@ export class SprintBaseGenerator {
         content: frontmatterNote(
           [
             'estimate: 1',
-            ...dueProperty,
+            ...dueProperty(addDays(currentStart, 3)),
             'in progress: false',
             'is done: true',
             ...(version === 'current' ? ['archived: false'] : []),
@@ -950,7 +1074,7 @@ export class SprintBaseGenerator {
         content: frontmatterNote(
           [
             'estimate: 2',
-            ...dueProperty,
+            ...dueProperty(getSprintEnd(currentStart, durationWeeks)),
             'in progress: false',
             'is done: false',
             ...(version === 'current' ? ['archived: false'] : []),
@@ -975,7 +1099,7 @@ export class SprintBaseGenerator {
           content: frontmatterNote(
             [
               'estimate: 2',
-              'due:',
+              `due: ${addDays(nextStart, 1)}`,
               'in progress: false',
               'is done: false',
               'archived: false',
@@ -996,7 +1120,7 @@ export class SprintBaseGenerator {
           content: frontmatterNote(
             [
               'estimate: 3',
-              'due:',
+              `due: ${addDays(nextStart, 3)}`,
               'in progress: false',
               'is done: false',
               'archived: false',

@@ -12,6 +12,17 @@
   creation should remain available only for a genuinely new workspace or an explicit
   destructive reset confirmed by the user.
 
+## Workspace relocation
+
+- [x] Detect or safely recover from a Sprint workspace folder renamed outside the
+  Sprint settings UI. While Obsidian is running, prefer the vault rename event to
+  update the configured workspace and Base paths without scanning every vault file.
+  For renames performed while Obsidian is closed or the plugin is disabled, provide an
+  explicit **Locate moved workspace** recovery action. Do not rely on a hidden marker
+  file unless Obsidian's supported Vault API can read and move it consistently on
+  desktop and mobile. Prevent automatic synchronization from silently recreating the
+  old workspace path when a configured root is missing.
+
 ## Progress reminders
 
 - [ ] Design an optional Duolingo-style reminder system that helps users maintain their
@@ -26,21 +37,52 @@
   controls. Keep reminder state local, avoid manipulative streak penalties, and test
   desktop, iOS, and Android behavior independently before release.
 
+## Agile ceremonies
+
+- [ ] Implement the solo-first ceremony companion proposed in
+  [AGILE_CEREMONIES_RESEARCH.md](AGILE_CEREMONIES_RESEARCH.md): sprint planning, brief
+  daily check-ins, sprint reviews, mini-retrospectives, and explicit sprint closing.
+  Support both self-guided and optional AI-assisted flows without introducing an AI
+  provider dependency. Reuse the existing sprint review and retrospective metadata
+  where practical, keep the user as the decision maker, and add ceremony commands,
+  persistence, completion indicators, and migration coverage incrementally.
+
 ## Task planning and board configuration
 
+- [x] Replace the plain project task count shown beside each Kanban project name with
+  **completed tasks / total tasks completed** (for example, `3/9 completed`). Archived
+  and filtered-out tasks are excluded. Keep the value synchronized after drag-and-drop
+  state changes and use an accessible label on narrow screens.
 - [x] Add a `due` date property to newly created task notes and the generated Tasks Base
   schema. Show Due by default in the inline task editor opened from a Kanban lane's
   **New task** button. Preserve existing task notes that do not have a due date, and use
   Obsidian's native date-property editor rather than a plain text field.
-- [ ] Add a Sprint planner view for quickly assigning and moving tasks among the backlog
-  and existing sprint notes. Support drag-and-drop reassignment without changing task
-  state, show useful capacity or estimate totals, preserve project relationships, and
-  confirm behavior for unassigned, archived, and completed tasks before implementation.
+- [x] Add a Sprint planner view for quickly assigning and moving tasks among the backlog
+  and existing sprint notes. Use project swimlanes with Backlog and chronological sprint
+  columns, support drag-and-drop across both projects and sprints without changing task
+  state, show useful capacity or estimate totals, and confirm behavior for unassigned,
+  archived, and completed tasks before implementation.
 - [x] Integrate the native Base **Properties** selector with the custom Kanban views so
   users can choose which task properties appear on cards. Changes should apply to Sprint
   board, Current sprint, and Next sprint views as appropriate, preserve property order,
   avoid duplicating the task title, and continue to use sensible defaults for newly
   generated Bases.
+- [x] Extract a shared generic Kanban component for Sprint board, Current sprint, Next
+  sprint, and Sprint planner views. Safe per-view **Group by** and **Order by** settings
+  preserve Project as the migration default. Grouping mutates editable note properties;
+  formulas, file metadata, derived state, and archive controls remain unavailable.
+  Empty groups are explicit, multi-value groups use their first value, and cross-group
+  moves replace that grouped value while preserving later values. Linked-note groups support deterministic numeric
+  property ordering with alphabetical tie-breaking and ascending/descending direction.
+
+## AI skills
+
+- [x] Audit and update the generated `sprint-vault` skills when Sprint workflows or
+  schemas change. Cover the Sprint planner, project and sprint reassignment, current
+  task/project/sprint properties, workspace recovery, and future ceremony features
+  where agent guidance is useful. Keep generated skills provider-independent, preserve
+  user custom instructions, and add regression tests so upgrades update managed content
+  without overwriting unrelated user-authored skill files.
 
 ## Localization
 
