@@ -26,3 +26,10 @@ The generated guidance covers projects, tasks, sprint assignment, estimates,
 state checkboxes, due dates, archived tasks, and sprint notes. It also explains
 that generated support files should be changed additively and that reset is a
 destructive operation.
+
+Human users should normally add future sprints with Sprint's **Add Sprint** or
+**Generate future sprint** controls. The generated skills also provide an
+idempotent manual-creation procedure for AI agents that cannot invoke those
+controls. Agents must derive the next number and dates from the configured
+cadence and existing sprint notes, reject collisions, append rather than
+overwrite, and allow Sprint synchronization to reconcile lifecycle statuses.

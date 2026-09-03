@@ -155,6 +155,9 @@ Sprint installs its own skill at `.agents/skills/sprint/SKILL.md` and `.claude/s
 
 Sprint also creates managed `AGENTS.md` and `CLAUDE.md` files inside the Sprint workspace. Creating corresponding instruction files at the vault root is optional and disabled by default because a vault may already contain user-managed instructions. The generated skill and vault-specific additions can be reviewed and edited from Sprint settings.
 
+The skills direct people to Sprint's controls for adding future sprints and document a
+safe manual fallback for AI agents that cannot invoke the UI.
+
 Sprint does not send vault content over the network or invoke an AI model. External AI tools run independently and have their own permissions and privacy behavior.
 
 ## Commands

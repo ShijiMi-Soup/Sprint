@@ -140,6 +140,10 @@ Projects table. Run **Sprint: Open summary** from the command palette to open it
   the configured automatic horizon.
 - Use **Add Sprint N** directly in Sprint planner or Sprint overview for the same
   sequential generation behavior.
+- Human users should prefer these controls. Optional AI agents may create future sprint
+  notes manually when necessary by following the collision-safe procedure in
+  [AI integration](ai-integration) and the
+  [agent guide](https://github.com/ShijiMi-Soup/Sprint/blob/main/docs/AGENT_GUIDE.md).
 - Catch up after Obsidian has been closed for one or more sprint cycles.
 - Mark generated sprint notes as `last`, `current`, `next`, `past`, or `future`.
 - Move unfinished work according to the selected rollover policy.

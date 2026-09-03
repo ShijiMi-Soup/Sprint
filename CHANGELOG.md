@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Documentation
+
+- Clarified that human users should add future sprints through Sprint's controls, while
+  AI agents may append compatible sprint notes manually using a documented,
+  collision-safe cadence and numbering procedure.
+
 ## 0.2.0 - 2026-09-03
 
 ### Changed
