@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.2.1 - 2026-09-04
+
 ### Documentation
 
 - Clarified that human users should add future sprints through Sprint's controls, while
