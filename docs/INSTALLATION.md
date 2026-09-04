@@ -2,7 +2,7 @@
 
 [English](INSTALLATION.md) | [日本語](INSTALLATION_ja.md)
 
-This guide covers installing Sprint 0.2.0 from Obsidian Community plugins and creating or reconnecting a Sprint workspace.
+This guide covers installing Sprint 0.2.1 from Obsidian Community plugins and creating or reconnecting a Sprint workspace.
 
 ## Requirements
 

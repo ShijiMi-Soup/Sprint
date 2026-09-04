@@ -372,7 +372,11 @@ describe('SprintBaseGenerator', () => {
     expect(written.get('Agile PM/AGENTS.md')).toContain('boolean `archived`');
     expect(written.get('Agile PM/AGENTS.md')).toContain('date `due`');
     expect(written.get('Agile PM/AGENTS.md')).toContain('Generate future sprint');
-    expect(written.get('.agents/skills/sprint/SKILL.md')).toContain('Sprint planner');
+    const generatedSkill = written.get('.agents/skills/sprint/SKILL.md');
+    expect(generatedSkill).toContain('Sprint planner');
+    expect(generatedSkill).toContain('## Manual Sprint Creation for AI Agents');
+    expect(generatedSkill).toContain('highest existing sprint number plus one');
+    expect(generatedSkill).toContain('Never replace or renumber an existing sprint note');
     expect(written.get('Agile PM/Tasks/Add your first real task.md')).toContain('due:');
   });
 

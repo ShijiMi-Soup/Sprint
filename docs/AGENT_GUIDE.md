@@ -69,7 +69,12 @@ When the user asks you to manage tasks, you may:
 - Set or update estimates when the user supplies an estimate or asks you to propose one.
 - Link tasks to projects and existing sprint notes.
 - Move tasks between backlog and existing sprints by updating the `sprint` property.
-- Use Sprint's **Generate future sprint** action when another planning horizon is needed. Do not manually invent sprint dates or reuse sprint numbers.
+- Prefer Sprint's **Add Sprint** or **Generate future sprint** controls when another
+  planning horizon is needed. Human users should use these controls rather than create
+  sprint files themselves.
+- AI agents may append future sprint notes manually when the user requests it or the
+  agent cannot invoke Sprint's UI. Follow the procedure below; never guess dates,
+  reuse sprint numbers, or overwrite existing notes.
 - Move tasks between Not started, In progress, and Done using the `in progress` and `is done` checkboxes.
 - Mark tasks complete only when the user says the work is complete or the available evidence clearly establishes completion.
 - Archive tasks only when the user wants them removed from sprint boards while retaining their notes in the Tasks view and vault history.
@@ -99,6 +104,40 @@ locate the moved workspace or create a replacement. Do not recreate the old path
 implicitly.
 
 For destructive or broad changes, summarize the proposed file changes and obtain confirmation first. Examples include deleting tasks, moving many tasks, rewriting estimates across a backlog, or changing Base schemas.
+
+## Manual Sprint Creation
+
+Sprint synchronization recognizes manually created sprint notes when they follow the
+workspace's established schema. An AI agent may append them safely:
+
+1. Read the profile settings and all notes in its `Sprints` folder. Confirm the configured
+   duration, naming format, latest valid `start date`, and highest valid `sprint number`.
+2. Stop and ask the user if dates or numbers conflict, the naming format is unclear, or
+   the cadence cannot be established from settings and existing notes.
+3. Use the highest existing sprint number plus one and apply the configured naming format
+   to the filename.
+4. Calculate the new start date from the latest dated sprint's start date plus the
+   configured duration in weeks. Calculate the inclusive end date as
+   `start date + (duration weeks * 7) - 1 day`. Store both as `YYYY-MM-DD`.
+5. Verify that the path, sprint number, and start date are all unused. Never replace or
+   renumber an existing sprint note.
+6. Create the note in the profile's `Sprints` folder with this frontmatter:
+
+   ```yaml
+   ---
+   sprint number: 13
+   start date: 2026-08-10
+   end date: 2026-08-16
+   sprint status: future
+   review: ""
+   retrospective: ""
+   ---
+   ```
+
+7. Add `## Goal`, `## Review`, and `## Retrospective` body sections. When creating
+   multiple sprints, calculate each next sprint from the note just created.
+8. Run Sprint synchronization when available. Otherwise leave the status as `future`
+   and tell the user that Sprint will reconcile lifecycle statuses during its next sync.
 
 ## Sprint Planning
 
